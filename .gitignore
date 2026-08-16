@@ -31,13 +31,13 @@ evidence/nap-pillow-synthetic/reviews.normalized.private.jsonl
 *.pem
 
 # Local state (regenerated)
-shared/
-evidence/
-evidence/*.txt
-evidence/*.jsonl
-evidence/*.json
-evidence/screenshots/
-!evidence/.gitkeep
+/shared/
+/evidence/
+/evidence/*.txt
+/evidence/*.jsonl
+/evidence/*.json
+/evidence/screenshots/
+!/evidence/.gitkeep
 
 # Agent packages (built by bootstrap)
 packages/*.zip

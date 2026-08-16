@@ -2,6 +2,13 @@
 
 Gap2SKU 是品类无关的“新品立项到打样决策防火墙”。它不替代 Accio 等上游研究/找品工具，而是把用户构思、市场证据、供应事实、成本、合规和样品验证组织成可审计的 `Decision-to-Sample Pack`。
 
+## 审核入口
+
+- [审核快照 Demo](https://gap2sku-review-production.up.railway.app)：公网只读回放，可查看三个已生成项目、7/7 Handoff、Artifact、冲突卡和 REVISE/GO/NO-GO 分支。
+- [GitHub 仓库](https://github.com/Orionxu6/gap2sku)：完整可复现项目代码与部署配置。
+
+审核快照不调用本机 DeepSeek/Qwen API、Matrix 或 Docker；评委输入不会触发新运行，所有展示内容来自已生成且版本化的快照。
+
 平台支持三种入口：发现新品机会、验证已有概念、升级现有 SKU。午睡枕只是数据最完整的演示项目，通用领域模型使用 `CategoryProfile`、`ResearchPlan`、`SampleSpecTemplate` 和 `CompliancePolicyPack`，不依赖枕头专属字段。
 
 最终结论有三类业务状态：

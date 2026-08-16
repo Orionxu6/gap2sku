@@ -1,0 +1,5 @@
+{
+  "case": "bad-004",
+  "rule": "R006",
+  "desc": "platform_visible labeled human_confirmed"
+}

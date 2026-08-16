@@ -1,0 +1,5 @@
+{
+  "case": "bad-009",
+  "rule": "R012",
+  "desc": "Spec committed by market agent, not leader"
+}

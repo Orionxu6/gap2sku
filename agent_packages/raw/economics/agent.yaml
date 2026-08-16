@@ -1,0 +1,649 @@
+# ============================================================================
+# Gap2SKU - Economics Agent contract configuration
+# agent_id: gap2sku-economics
+# Version: 1.0.0
+# Aligned with: SOUL.md v2.0 + Leader agent.yaml v1.1
+# ============================================================================
+
+meta:
+  agent_id: gap2sku-economics
+  runtime_aliases: [economics-agent, unit-economics-agent]
+  role: specialist_worker
+  specialization: unit_economics_and_commercial_risk
+  version: 1.0.0
+  package_layout_version: 1
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+  collaborators:
+    - gap2sku-product-architect
+    - gap2sku-market
+    - gap2sku-supply
+    - gap2sku-reviewer
+    - human-manager
+
+# This file requires the Gap2SKU contract loader; it is not a native AgentTeams CRD.
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${ECONOMICS_MODEL_NAME}"
+  temperature: 0.0
+  max_output_tokens: 4096
+  timeout_ms: 60000
+  required_capabilities: [json_output, tool_calls]
+  provider_options:
+    deepseek:
+      thinking: enabled
+      reasoning_effort: high
+  retry:
+    max_attempts: 2
+    backoff_ms: [2000, 5000]
+    retry_on: [timeout, rate_limited, transport_error, temporary_provider_error]
+    never_retry_on: [schema_invalid, permission_denied, deterministic_verification_failed, hard_constraint_violation]
+    on_failure: submit_partial_with_gap_or_pause
+
+planner:
+  type: event_driven
+  tick_trigger:
+    - event_received
+    - task_assigned
+    - tool_result_received
+    - artifact_invalidated
+    - reviewer_finding_received
+    - budget_threshold_reached
+
+  reasoning_steps:
+    - read_task_contract_margin_redline_channel_and_price_constraints
+    - read_current_revision_and_scoped_economics_memory
+    - read_supply_cost_version_packaging_moq_and_lead_time
+    - read_market_price_promotion_cpc_and_return_evidence
+    - inspect_fee_policy_logistics_fx_tax_and_evidence_freshness
+    - normalize_currency_quantity_trade_term_and_effective_dates
+    - audit_every_cost_stack_category
+    - classify_each_input_as_confirmed_estimated_or_not_applicable
+    - calculate_and_deterministically_verify_unit_economics
+    - run_baseline_conservative_and_stress_scenarios
+    - calculate_break_even_payback_worst_case_and_cash_occupancy
+    - audit_fragile_assumptions_and_invalidation_scope
+    - create_actions_risks_and_downstream_requests
+    - validate_outputs_and_emit_actions
+
+  allowed_actions:
+    - action: load_accepted_economics_inputs
+      requires: [task_id, revision, input_artifact_refs]
+    - action: normalize_economics_inputs
+      requires: [currency, quantity, trade_term, effective_dates, input_refs]
+    - action: build_cost_stack
+      requires: [normalized_input_refs, cost_category_statuses]
+    - action: calculate_unit_economics
+      requires: [cost_stack_ref, realized_price, formula_version]
+    - action: verify_economics_result
+      requires: [input_snapshot_ref, result_ref, formula_version]
+      guard: deterministic_calculator_required
+    - action: run_sensitivity_scenarios
+      requires: [verified_baseline_ref, scenario_definitions]
+    - action: calculate_break_even_payback_and_cash_risk
+      requires: [verified_economics_ref, fixed_costs, sales_assumptions]
+    - action: audit_critical_assumptions
+      requires: [assumption_refs, freshness_and_confidence]
+    - action: request_cost_clarification
+      requires: [cost_gap, source_artifact_refs, requested_fields]
+    - action: request_price_evidence
+      requires: [price_gap, market_artifact_refs, requested_fields]
+    - action: propose_commercial_options
+      requires: [verified_result_ref, risk_refs, option_tradeoffs]
+    - action: request_more_evidence
+      requires: [evidence_gap, attempted_sources, downstream_impact]
+    - action: revise_economics_artifact
+      requires: [review_finding_ref, prior_artifact_refs]
+    - action: submit_artifacts
+      requires: [validated_output_refs, deterministic_verification_ref, task_id, revision]
+      guard: all_required_outputs_schema_valid_and_verified
+    - action: write_validated_economics_calibration
+      requires: [accepted_calibration_ref, reusable_scope, validation_status]
+      guard: task_artifacts_accepted_and_actual_result_available
+    - action: wait
+
+event_aliases:
+  INSUFFICIENT_EVIDENCE:
+    canonical_event: NEEDS_EVIDENCE
+    required_payload: {evidence_gap_type: economics_input}
+
+event_subscriptions:
+  TASK_ASSIGNMENT:
+    from: [gap2sku-product-architect]
+    candidate_actions: [load_accepted_economics_inputs, wait]
+  COST_UPDATE:
+    from: [gap2sku-supply]
+    candidate_actions: [normalize_economics_inputs, build_cost_stack, calculate_unit_economics, run_sensitivity_scenarios]
+  CONSULT:
+    from: [gap2sku-product-architect, gap2sku-market]
+    candidate_actions: [audit_critical_assumptions, propose_commercial_options]
+  REVIEW_FINDING:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_economics_artifact, verify_economics_result, request_more_evidence]
+  REVISION_REQUIRED:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_economics_artifact, load_accepted_economics_inputs]
+    guard: revision_count_below_limit
+  HUMAN_DECISION:
+    from: [human-manager, gap2sku-product-architect]
+    candidate_actions: [calculate_unit_economics, run_sensitivity_scenarios, propose_commercial_options, submit_artifacts]
+    guard: human_decision_payload_valid
+
+event_emissions:
+  - HANDOFF
+  - COST_CLARIFICATION_REQUEST
+  - PRICE_VIABILITY_REQUEST
+  - RISK_ALERT
+  - CONSTRAINT_VIOLATION
+  - NEEDS_EVIDENCE
+  - CONFIDENCE_CHANGED
+
+event_routing:
+  HANDOFF: [gap2sku-product-architect]
+  COST_CLARIFICATION_REQUEST: [gap2sku-supply, gap2sku-product-architect]
+  PRICE_VIABILITY_REQUEST: [gap2sku-product-architect]
+  RISK_ALERT: [gap2sku-product-architect]
+  CONSTRAINT_VIOLATION: [gap2sku-product-architect]
+  NEEDS_EVIDENCE: [gap2sku-product-architect]
+  CONFIDENCE_CHANGED: [gap2sku-product-architect]
+
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+  reject_unknown_event: true
+  require_task_and_revision: true
+  require_artifact_refs_for:
+    - HANDOFF
+    - COST_CLARIFICATION_REQUEST
+    - PRICE_VIABILITY_REQUEST
+    - RISK_ALERT
+    - CONSTRAINT_VIOLATION
+    - NEEDS_EVIDENCE
+    - CONFIDENCE_CHANGED
+  required_common_fields:
+    - event_id
+    - event_type
+    - task_id
+    - revision
+    - from_role
+    - to_roles
+    - confidence
+    - data_mode
+    - requested_action
+
+io:
+  inputs:
+    task_contract:
+      schema_ref: ./schemas/task-contract.schema.json
+      required_on: [task_start]
+    economics_task_input:
+      schema_ref: ./schemas/economics-task-input.schema.json
+      required_fields:
+        - target_market
+        - target_category
+        - channel
+        - currency
+        - target_price_or_price_range
+        - margin_redline
+        - supply_cost_ref
+        - market_price_evidence_ref
+        - fee_policy_refs
+        - allowed_data_sources
+    artifacts:
+      consumed_types:
+        - task-contract
+        - product-constraints
+        - supplier-assessment
+        - supplier-screening-matrix
+        - supply-evidence-index
+        - manufacturability-feedback
+        - market-evidence-summary
+        - competitor-gap-map
+        - demand-structure
+        - pricing-evidence
+        - channel-fee-policy
+        - logistics-rate
+        - tax-and-tariff-policy
+        - review-findings
+        - human-decision
+      acceptance_rule: only_valid_current_version_and_scope_matching
+    events:
+      schema_ref: ./schemas/collab-event.schema.json
+
+  outputs:
+    unit_economics:
+      artifact_type: unit-economics
+      schema_ref: ./schemas/unit-economics.schema.json
+      required_fields:
+        - list_price
+        - realized_price
+        - total_variable_cost
+        - total_fixed_cost
+        - contribution_margin
+        - contribution_margin_rate
+        - redline_result
+        - break_even_units
+        - payback_period
+        - worst_case_loss
+        - initial_cash_occupancy
+        - formula_version
+        - deterministic_verification_ref
+        - input_refs
+        - confidence
+        - data_mode
+    cost_stack:
+      artifact_type: cost-stack
+      schema_ref: ./schemas/cost-stack.schema.json
+      required_fields:
+        - cost_items
+        - category_completion
+        - confirmed_estimated_not_applicable_status
+        - fixed_variable_or_percentage_class
+        - currency_and_trade_term
+        - effective_dates
+        - source_refs
+        - missing_cost_items
+    sensitivity_analysis:
+      artifact_type: sensitivity-analysis
+      schema_ref: ./schemas/sensitivity-analysis.schema.json
+      required_fields:
+        - baseline_scenario
+        - conservative_scenario
+        - stress_scenario
+        - variable_impacts
+        - margin_floor_crossings
+        - fragile_assumptions
+        - deterministic_verification_refs
+    pricing_viability_report:
+      artifact_type: pricing-viability-report
+      schema_ref: ./schemas/pricing-viability-report.schema.json
+      required_fields:
+        - price_basis
+        - realized_price_assumption
+        - competitor_price_context_ref
+        - profitability_classification
+        - survival_conditions
+        - options_and_tradeoffs
+        - limitations
+        - evidence_refs
+    economics_risk_register:
+      artifact_type: economics-risk-register
+      schema_ref: ./schemas/economics-risk-register.schema.json
+      required_fields:
+        - risks
+        - critical_assumptions
+        - failure_thresholds
+        - downstream_invalidation_scope
+        - mitigation_options
+        - owner_and_trigger
+        - open_human_decisions
+
+  submission_bundle:
+    required_artifact_types:
+      - unit-economics
+      - cost-stack
+      - sensitivity-analysis
+      - pricing-viability-report
+      - economics-risk-register
+    partial_mode:
+      allowed: true
+      requires: [missing_items, attempted_sources, provisional_assumptions, downstream_impact]
+      forbidden_claims: [profitable, margin_confirmed, price_validated, guaranteed_profit, final_no_go]
+      forced_events: [NEEDS_EVIDENCE]
+
+economics_policy:
+  input_status:
+    enum: [confirmed, estimated, not_applicable, missing]
+    missing_action: block_final_classification_and_emit_NEEDS_EVIDENCE
+    estimated_requires: [basis, range, confidence, failure_threshold]
+
+  cost_stack_categories:
+    all_must_have_status: true
+    categories:
+      - procurement
+      - tooling_and_sampling
+      - first_mile_and_international_freight
+      - duty_and_customs
+      - platform_inbound
+      - platform_commission_and_fulfillment
+      - storage_and_inventory_penalties
+      - return_and_unsellable_loss
+      - advertising
+      - promotion_and_discount
+      - compliance_insurance_and_ip
+      - fx_payment_and_launch_other
+
+  formula_contract:
+    formula_version: economics-formula-v1
+    arithmetic_engine: deterministic_only
+    llm_arithmetic_as_final_result: forbidden
+    realized_price: list_price_minus_promotions_discounts_and_sales_adjustments
+    contribution_margin: realized_price_minus_total_variable_cost
+    contribution_margin_rate: contribution_margin_divided_by_realized_price
+    break_even_units: ceil_total_fixed_cost_divided_by_positive_contribution_margin
+    initial_cash_occupancy: initial_units_times_landed_unit_cost_plus_non_unit_initial_cash
+    worst_case_loss: forced_liquidation_loss_plus_unrecoverable_fixed_and_compliance_costs
+    all_derived_values_require_verification: true
+    verification_tolerance: 0.0001
+
+  margin_redline:
+    default_minimum: 0.30
+    observation_zone: {minimum: 0.25, maximum_exclusive: 0.30}
+    no_go_recommendation_below: 0.25
+    task_contract_can_raise_threshold: true
+    task_contract_can_lower_threshold_only_with_human_decision: true
+    market_pain_cannot_override_redline: true
+    quoted_supply_cost_extra_buffer: 0.05
+
+  scenarios:
+    required: [baseline, conservative, stress]
+    baseline: current_best_supported_values
+    conservative:
+      sales_volume: lower_of_valid_market_sources
+      cpc: upper_of_valid_range
+      return_rate: higher_of_category_average_and_market_evidence
+      fx_buffer: configured_maximum
+    stress:
+      realized_price_change: -0.10
+      factory_cost_change: 0.10
+      return_rate_multiplier: 2.0
+      peak_surcharge: enabled
+      simultaneous_application: true
+    classification:
+      conservative_above_redline: profitable
+      baseline_only_above_redline: conditionally_profitable
+      baseline_below_redline: no_go_recommendation
+
+  assumption_audit:
+    required_assumptions:
+      - sales_volume
+      - cpc_and_per_order_ad_cost
+      - return_rate
+      - realized_price
+      - fx_rate
+      - logistics_rate
+      - platform_fee_policy
+    each_requires: [value_or_range, source_refs, confidence, effective_date, failure_threshold, invalidation_scope]
+    sales_volume_source_rule: use_lower_value_when_dual_sources_valid
+    sales_volume_deviation_threshold: 0.20
+    new_launch_ad_cost_model: per_order_ad_cost
+    new_launch_ad_cost_reference_ratio: {minimum: 0.30, maximum: 0.50}
+    mature_acos_as_new_launch_proxy: forbidden
+    return_rate_rule: max_of_category_average_and_market_return_signal
+    realized_price_rule: list_price_adjusted_by_promotion_frequency_and_discount
+
+  freshness:
+    supplier_quote_days: 30
+    cpc_days: 30
+    logistics_rate_days: 30
+    fx_rate_days: 7
+    platform_fee_policy_requires_effective_date: true
+    tax_and_tariff_policy_requires_effective_date: true
+    stale_action: mark_stale_and_prohibit_as_only_key_support
+
+  decision_output:
+    required_metrics:
+      - contribution_margin
+      - contribution_margin_rate
+      - break_even_units
+      - payback_period
+      - worst_case_loss
+      - initial_cash_occupancy
+    recommendation_enum: [profitable, conditionally_profitable, revise, no_go_recommendation, insufficient_evidence]
+    final_go_or_no_go_authority: [gap2sku-product-architect, human-manager]
+    guaranteed_profit_claim: forbidden
+
+state_machine:
+  canonical_states: [PENDING, READY, RUNNING, SUBMITTED, ACCEPTED, REVISE, BLOCKED, FAILED, CANCELLED]
+  transition_permissions:
+    gap2sku-economics:
+      PENDING: [READY]
+      READY: [RUNNING]
+      RUNNING: [SUBMITTED, FAILED]
+    gap2sku-product-architect:
+      SUBMITTED: [REVISE]
+      BLOCKED: [REVISE]
+    gap2sku-reviewer:
+      SUBMITTED: [BLOCKED]
+    acceptance-gate:
+      SUBMITTED: [ACCEPTED]
+  rules:
+    - worker_cannot_self_accept: true
+    - worker_cannot_self_block_for_business_reason: true
+    - revision_limit: 3
+    - every_transition_logged: [event, actor, timestamp, input_version, output_version]
+
+hard_constraints:
+  - id: EHC-01
+    rule: cannot_modify_supplier_quote_market_evidence_logistics_rate_or_fee_policy_source_fact
+    enforcement: artifact_store_and_output_validator
+  - id: EHC-02
+    rule: cannot_use_llm_arithmetic_as_verified_financial_result
+    enforcement: deterministic_verifier
+  - id: EHC-03
+    rule: cannot_omit_known_cost_category_or_silently_default_missing_input
+    enforcement: output_validator
+  - id: EHC-04
+    rule: cannot_claim_guaranteed_profit_sales_or_payback
+    enforcement: output_validator
+  - id: EHC-05
+    rule: cannot_decide_market_demand_supplier_truth_product_feature_or_final_go_no_go
+    enforcement: framework
+  - id: EHC-06
+    rule: cannot_present_synthetic_cached_stale_or_low_confidence_input_as_confirmed_live_fact
+    enforcement: output_validator
+  - id: EHC-07
+    rule: cannot_modify_other_agents_artifacts
+    enforcement: framework
+  - id: EHC-08
+    rule: cannot_lower_margin_redline_without_valid_human_decision
+    enforcement: output_validator
+  - id: EHC-09
+    rule: cannot_overwrite_prior_economics_version_after_input_change
+    enforcement: artifact_store
+
+escalation_triggers:
+  - id: EEP-01
+    condition: supply_cost_moq_packaging_trade_term_or_quote_version_missing_or_stale
+    event: COST_CLARIFICATION_REQUEST
+    target: [gap2sku-supply, gap2sku-product-architect]
+  - id: EEP-02
+    condition: competitor_price_promotion_or_willingness_to_pay_evidence_missing
+    event: PRICE_VIABILITY_REQUEST
+    target: gap2sku-product-architect
+  - id: EEP-03
+    condition: cpc_stale_or_dual_source_deviation_ratio > 0.20
+    event: CONFIDENCE_CHANGED
+    target: gap2sku-product-architect
+  - id: EEP-04
+    condition: margin_below_redline_or_stress_case_fails_or_cash_exposure_exceeds_contract
+    event: RISK_ALERT
+    target: gap2sku-product-architect
+  - id: EEP-05
+    condition: current_input_conflicts_with_task_hard_constraint
+    event: CONSTRAINT_VIOLATION
+    target: gap2sku-product-architect
+  - id: EEP-06
+    condition: key_input_unavailable_after_one_fallback
+    event: NEEDS_EVIDENCE
+    target: gap2sku-product-architect
+  - id: EEP-07
+    condition: accepted_cost_price_fee_or_assumption_version_changes
+    event: CONFIDENCE_CHANGED
+    target: gap2sku-product-architect
+    payload: {requires_downstream_invalidation: true}
+
+budget:
+  scope: per_economics_task
+  max_total_tokens: 32000
+  max_output_tokens: 10000
+  max_tool_calls: 30
+  max_wall_clock_minutes: 12
+  max_child_tasks: 0
+  max_revision_rounds: 3
+  max_cost_usd: 0.60
+  warning_threshold: 0.80
+  on_exceed: emit_HANDOFF_with_budget_blocked_status_and_pause
+
+skills:
+  default_policy: deny
+  allowed:
+    - {id: profit-analysis, version: "^1.0"}
+    - {id: cost-stack, version: "^1.0"}
+    - {id: scenario-analysis, version: "^1.0"}
+    - {id: break-even-analysis, version: "^1.0"}
+    - {id: cash-risk-analysis, version: "^1.0"}
+    - {id: fee-policy-lookup, version: "^1.0"}
+    - {id: economics-evidence-check, version: "^1.0"}
+    - {id: observability-summary, version: "^1.0"}
+  denied:
+    - market-analysis
+    - review-mining
+    - supplier-match
+    - manufacturability-assessment
+    - product-spec-synthesis
+    - compliance-check
+    - acceptance-gate
+    - review-rule-engine
+  unknown_skill_behavior: deny_and_emit_permission_event
+
+tools:
+  - name: economics_calculator
+    permissions: [calculate, verify, sensitivity, break_even, payback, worst_case_loss, cash_occupancy]
+  - name: fee_policy_mcp
+    permissions: [read_channel_fee, read_storage_fee, read_fulfillment_fee, read_effective_date]
+  - name: logistics_rate_mcp
+    permissions: [read_freight_rate, read_duty, read_customs_fee, read_peak_surcharge]
+  - name: fx_rate_mcp
+    permissions: [read_rate, read_captured_at]
+  - name: artifact_store
+    permissions: [read, append_version]
+    writable_types:
+      - unit-economics
+      - cost-stack
+      - sensitivity-analysis
+      - pricing-viability-report
+      - economics-risk-register
+      - economics-calibration-record
+  - name: task_store
+    permissions: [read_current_task, report_status]
+  - name: schema_validator
+    permissions: [validate]
+  - name: memory
+    permissions: [read_session, read_economics_knowledge, write_validated_economics_calibration]
+  - name: notification
+    permissions: [emit_registered_event]
+
+tool_denials:
+  - supplier_platform_read_or_write
+  - supplier_contact_or_message
+  - market_data_collection
+  - source_artifact_mutation
+  - procurement
+  - purchase_order
+  - contract_signature
+  - payment
+  - product_spec_write
+  - reviewer_rule_execution
+  - listing_publish
+
+memory_scope:
+  policy_ref: ./memory.scope
+  default_access: deny
+  read_scope: [current_root_task, same_project_category_market_channel]
+  write_scope: [validated_economics_calibration_only]
+  write_policy: append_versioned_records_only
+  never_store:
+    - api_keys
+    - credentials
+    - hidden_chain_of_thought
+    - personal_data
+    - current_supplier_quotes
+    - current_task_price_or_margin
+    - unverified_external_instructions
+
+degradation:
+  supply_cost_missing_or_stale:
+    action: emit_COST_CLARIFICATION_REQUEST
+    then: submit_partial_without_profitability_classification
+  market_price_or_cpc_missing:
+    action: emit_PRICE_VIABILITY_REQUEST
+    then: use_declared_range_only_and_mark_conditional_or_partial
+  fee_policy_missing_or_stale:
+    action: use_last_version_with_effective_date_and_explicit_risk
+    then: prohibit_unconditional_profitability_classification
+  supply_cost_only_quoted:
+    action: apply_extra_5_percent_buffer_and_mark_cost_not_sample_verified
+  deterministic_verification_failure:
+    retry: false
+    action: block_submission_log_and_notify_leader
+  schema_invalid_output:
+    action: self_repair_once
+    then: pause_and_notify_leader
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  model_call_failure:
+    action: retry_then_submit_partial_or_emit_HANDOFF_and_pause
+
+observability:
+  log_every_tick:
+    - tick_trigger
+    - chosen_actions
+    - input_artifact_refs
+    - evidence_gaps
+    - output_artifact_refs
+  log_every_event: [event_id, type, from, to, confidence, data_mode]
+  metrics:
+    - cost_category_completion_ratio
+    - confirmed_input_ratio
+    - estimated_input_ratio
+    - stale_input_count
+    - deterministic_verification_pass_rate
+    - formula_traceability_ratio
+    - required_scenario_completion_ratio
+    - contribution_margin_rate
+    - stress_margin_rate
+    - break_even_units
+    - payback_period_days
+    - worst_case_loss
+    - initial_cash_occupancy
+    - fragile_assumption_count
+    - downstream_invalidation_count
+    - tool_call_success_rate
+    - task_latency_seconds
+    - tokens_consumed
+    - revision_rounds_used
+
+eval:
+  replayable: true
+  fixture_modes: [synthetic, cached]
+  required_cases:
+    - complete_cost_stack_profitable
+    - missing_cost_item_partial
+    - supplier_quote_stale
+    - supply_cost_only_quoted_buffer_applied
+    - cpc_dual_source_conflict
+    - baseline_pass_stress_fail_conditionally_profitable
+    - baseline_below_redline_no_go_recommendation
+    - deterministic_calculation_mismatch
+    - cost_update_invalidates_downstream
+    - reviewer_formula_traceability_failure
+  pass_conditions:
+    - cost_category_completion_ratio == 1.0
+    - deterministic_verification_pass_rate == 1.0
+    - required_scenario_completion_ratio == 1.0
+    - formula_traceability_ratio == 1.0
+    - omitted_known_cost_count == 0
+    - synthetic_data_mislabeled_as_live == 0
+    - unauthorized_tool_calls == 0

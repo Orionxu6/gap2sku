@@ -1,0 +1,618 @@
+# ============================================================================
+# Gap2SKU - Supply Agent contract configuration
+# agent_id: gap2sku-supply
+# Version: 1.0.0
+# Aligned with: SOUL.md v2.0 + AGENTS.md v1.0.0
+# ============================================================================
+
+meta:
+  agent_id: gap2sku-supply
+  runtime_aliases: [supply-agent, gap2sku-supplier-intelligence]
+  role: specialist_worker
+  specialization: supply_chain_feasibility
+  version: 1.0.0
+  package_layout_version: 1
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+  collaborators:
+    - gap2sku-product-architect
+    - gap2sku-market
+    - gap2sku-economics
+    - gap2sku-reviewer
+    - human-manager
+
+# This file requires the Gap2SKU contract loader; it is not a native AgentTeams CRD.
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${SUPPLY_MODEL_NAME}"
+  temperature: 0.1
+  max_output_tokens: 4096
+  timeout_ms: 60000
+  required_capabilities: [json_output, tool_calls]
+  provider_options:
+    deepseek:
+      thinking: enabled
+      reasoning_effort: medium
+  retry:
+    max_attempts: 2
+    backoff_ms: [2000, 5000]
+    retry_on: [timeout, rate_limited, transport_error, temporary_provider_error]
+    never_retry_on: [schema_invalid, permission_denied, hard_constraint_violation]
+    on_failure: submit_partial_with_gap_or_pause
+
+planner:
+  type: event_driven
+  tick_trigger:
+    - event_received
+    - task_assigned
+    - tool_result_received
+    - artifact_invalidated
+    - reviewer_finding_received
+    - budget_threshold_reached
+
+  reasoning_steps:
+    - read_task_contract_features_and_commercial_terms
+    - read_constraints_current_revision_and_scoped_supply_memory
+    - inspect_required_inputs_source_permissions_and_freshness
+    - decompose_features_into_material_process_structure_tooling_certification_and_transport
+    - collect_or_reuse_allowed_supplier_evidence
+    - normalize_quotes_to_currency_quantity_trade_term_packaging_and_fee_scope
+    - run_supplier_funnel_and_identity_checks
+    - run_class_a_veto_checks_before_comparison
+    - run_class_b_constraint_and_negotiation_checks
+    - assess_samples_bulk_consistency_packaging_and_transport
+    - select_primary_and_backup_with_risks
+    - identify_conflicts_gaps_and_downstream_impacts
+    - validate_outputs_and_emit_actions
+
+  allowed_actions:
+    - action: collect_supplier_evidence
+      requires: [task_id, target_category, allowed_sources, commercial_terms]
+    - action: normalize_supplier_quotes
+      requires: [quote_refs, currency, quantity_tiers, trade_term, packaging_scope]
+    - action: assess_manufacturability
+      requires: [feature_hypothesis_refs, product_constraints_ref]
+    - action: verify_supplier_identity_and_capability
+      requires: [supplier_ref, evidence_refs]
+    - action: verify_certification
+      requires: [certificate_ref, target_market, issuing_authority]
+    - action: execute_supplier_funnel
+      requires: [candidate_refs, funnel_stage, screening_criteria]
+    - action: design_negotiation_path
+      requires: [constraint_gap, exchange_options, supplier_ref]
+    - action: create_sample_validation_plan
+      requires: [supplier_refs, test_requirements, acceptance_thresholds]
+    - action: assess_packaging_and_transport
+      requires: [product_dimensions, packaging_ref, target_channel, transport_attributes]
+    - action: request_consultation
+      requires: [target_agent, question, artifact_refs, response_condition]
+    - action: request_more_evidence
+      requires: [evidence_gap, attempted_sources, downstream_impact]
+    - action: revise_supply_artifact
+      requires: [review_finding_ref, prior_artifact_refs]
+    - action: submit_artifacts
+      requires: [validated_output_refs, task_id, revision]
+      guard: all_required_outputs_schema_valid
+    - action: write_validated_supply_memory
+      requires: [accepted_supply_knowledge_ref, reusable_scope, validation_status]
+      guard: task_artifacts_accepted
+    - action: wait
+
+# Legacy names are normalized before routing.
+event_aliases:
+  NEEDS_HUMAN_CONFIRMATION:
+    canonical_event: NEEDS_EVIDENCE
+    required_payload: {evidence_gap_type: supplier_confirmation}
+  FEASIBILITY_REQUEST:
+    canonical_event: CONSULT
+    required_payload: {consult_type: manufacturability}
+
+event_subscriptions:
+  TASK_ASSIGNMENT:
+    from: [gap2sku-product-architect]
+    candidate_actions: [collect_supplier_evidence, assess_manufacturability, wait]
+  CONSULT:
+    from: [gap2sku-product-architect, gap2sku-market]
+    candidate_actions: [assess_manufacturability, assess_packaging_and_transport, request_more_evidence]
+  COST_CLARIFICATION_REQUEST:
+    from: [gap2sku-product-architect, gap2sku-economics]
+    candidate_actions: [normalize_supplier_quotes, submit_artifacts]
+  EVIDENCE_CHALLENGE:
+    from: [gap2sku-product-architect, gap2sku-market]
+    candidate_actions: [verify_supplier_identity_and_capability, assess_manufacturability, request_more_evidence]
+  CONSTRAINT_VIOLATION:
+    from: [gap2sku-product-architect, gap2sku-economics]
+    candidate_actions: [normalize_supplier_quotes, design_negotiation_path, assess_packaging_and_transport]
+  REVIEW_FINDING:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_supply_artifact, request_more_evidence]
+  REVISION_REQUIRED:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_supply_artifact, collect_supplier_evidence, assess_manufacturability]
+    guard: revision_count_below_limit
+  HUMAN_DECISION:
+    from: [human-manager, gap2sku-product-architect]
+    candidate_actions: [collect_supplier_evidence, design_negotiation_path, submit_artifacts]
+    guard: human_decision_payload_valid
+
+event_emissions:
+  - HANDOFF
+  - FEASIBILITY_FEEDBACK
+  - EVIDENCE_CHALLENGE
+  - CONSTRAINT_VIOLATION
+  - COMPLIANCE_FLAG
+  - NEEDS_EVIDENCE
+  - COST_UPDATE
+  - CONFIDENCE_CHANGED
+
+event_routing:
+  HANDOFF: [gap2sku-product-architect]
+  FEASIBILITY_FEEDBACK: [gap2sku-market, gap2sku-product-architect]
+  EVIDENCE_CHALLENGE: [gap2sku-product-architect]
+  CONSTRAINT_VIOLATION: [gap2sku-product-architect]
+  COMPLIANCE_FLAG: [gap2sku-product-architect]
+  NEEDS_EVIDENCE: [gap2sku-product-architect]
+  COST_UPDATE: [gap2sku-economics, gap2sku-product-architect]
+  CONFIDENCE_CHANGED: [gap2sku-product-architect]
+
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+  reject_unknown_event: true
+  require_task_and_revision: true
+  require_artifact_refs_for:
+    - HANDOFF
+    - FEASIBILITY_FEEDBACK
+    - EVIDENCE_CHALLENGE
+    - CONSTRAINT_VIOLATION
+    - COMPLIANCE_FLAG
+    - NEEDS_EVIDENCE
+    - COST_UPDATE
+    - CONFIDENCE_CHANGED
+  required_common_fields:
+    - event_id
+    - event_type
+    - task_id
+    - revision
+    - from_role
+    - to_roles
+    - confidence
+    - data_mode
+    - requested_action
+
+io:
+  inputs:
+    task_contract:
+      schema_ref: ./schemas/task-contract.schema.json
+      required_on: [task_start]
+    supply_task_input:
+      schema_ref: ./schemas/supply-task-input.schema.json
+      required_fields:
+        - target_market
+        - target_category
+        - channel
+        - sales_window
+        - constraints_ref
+        - feature_hypothesis_refs
+        - commercial_terms
+        - allowed_data_sources
+    artifacts:
+      consumed_types:
+        - task-contract
+        - product-constraints
+        - feature-hypotheses
+        - market-evidence-summary
+        - supplier-records-snapshot
+        - supplier-quote
+        - supplier-capability-evidence
+        - certification-evidence
+        - sample-test-evidence
+        - packaging-specification
+        - review-findings
+        - human-decision
+      acceptance_rule: only_valid_and_scope_matching
+    events:
+      schema_ref: ./schemas/collab-event.schema.json
+
+  outputs:
+    supplier_assessment:
+      artifact_type: supplier-assessment
+      schema_ref: ./schemas/supplier-assessment.schema.json
+      required_fields:
+        - candidate_summary
+        - primary_supplier
+        - backup_supplier
+        - recommendation_status
+        - class_a_results
+        - class_b_results
+        - evidence_refs
+        - confidence
+        - data_mode
+    supplier_screening_matrix:
+      artifact_type: supplier-screening-matrix
+      schema_ref: ./schemas/supplier-screening-matrix.schema.json
+      required_fields:
+        - candidates
+        - standardized_quote_basis
+        - class_a_veto_checks
+        - class_b_constraint_checks
+        - negotiation_paths
+        - eliminated_supplier_reasons
+        - evidence_refs
+    manufacturability_feedback:
+      artifact_type: manufacturability-feedback
+      schema_ref: ./schemas/manufacturability-feedback.schema.json
+      required_fields:
+        - feature_results
+        - process_and_material_requirements
+        - tooling_requirements
+        - certification_requirements
+        - alternatives_and_tradeoffs
+        - linked_feature_refs
+        - evidence_refs
+    supply_risk_register:
+      artifact_type: supply-risk-register
+      schema_ref: ./schemas/supply-risk-register.schema.json
+      required_fields:
+        - risks
+        - single_source_dependency
+        - sample_bulk_consistency
+        - quality_inspection
+        - packaging_and_transport
+        - mitigation_and_owner
+        - open_human_checks
+    supply_evidence_index:
+      artifact_type: supply-evidence-index
+      schema_ref: ./schemas/supply-evidence-index.schema.json
+      required_fields:
+        - evidence_id
+        - supplier_id
+        - source_type
+        - source_uri_or_snapshot_ref
+        - captured_or_confirmed_at
+        - validation_level
+        - applicable_spec_and_quantity
+        - trade_term
+        - freshness_status
+        - data_mode
+
+  submission_bundle:
+    required_artifact_types:
+      - supplier-assessment
+      - supplier-screening-matrix
+      - manufacturability-feedback
+      - supply-risk-register
+      - supply-evidence-index
+    partial_mode:
+      allowed: true
+      requires: [missing_items, attempted_sources, downstream_impact, provisional_assumptions]
+      forbidden_claims: [production_ready, supplier_confirmed, cost_confirmed, compliance_cleared]
+      forced_events: [NEEDS_EVIDENCE]
+
+supply_policy:
+  validation_levels:
+    enum: [platform_visible, quoted, sample_verified, factory_confirmed]
+    confidence_mapping:
+      platform_visible: low
+      quoted: low
+      sample_verified: medium
+      factory_confirmed: high
+    final_recommendation_minimum: sample_verified
+    conditional_recommendation_minimum: quoted
+    production_commitment_minimum: factory_confirmed
+
+  evidence:
+    every_key_claim_requires_evidence_id: true
+    source_types:
+      - live_supplier_quote
+      - platform_record
+      - cached_snapshot
+      - synthetic_fixture
+      - sample_test
+      - factory_confirmation
+      - certification_registry
+      - historical_cooperation
+      - human_confirmation
+    data_mode_enum: [live, cached, synthetic, mixed]
+    confidence_enum: [high, medium, low, unknown]
+    quote_freshness_days: 30
+    stale_action: mark_stale_and_prohibit_as_key_cost_support
+    recommendation_confidence_rule: cannot_exceed_weakest_critical_evidence
+
+  supplier_funnel:
+    preferred_candidate_count: {min: 15, max: 20}
+    preferred_shortlist_count: {min: 5, max: 6}
+    preferred_sample_count: {min: 2, max: 3}
+    final_selection: {primary: 1, backup: 1}
+    insufficient_coverage_action: disclose_and_submit_partial_or_NEEDS_EVIDENCE
+    single_source_dependency_must_be_registered: true
+
+  class_a_vetoes:
+    all_candidates_must_be_checked: true
+    checks:
+      - required_material_unavailable_or_substitution_evidence
+      - mandatory_certification_missing_or_unverifiable
+      - refuses_independent_third_party_inspection
+    on_confirmed_failure: eliminate_supplier_and_emit_constraint_context
+    negotiation_allowed: false
+
+  class_b_negotiables:
+    checks: [moq, factory_cost, normal_lead_time, tooling]
+    negotiation_path_required_on_failure: true
+    seasonal_window_rule: missed_sales_window_is_quasi_veto_and_escalates
+    cost_over_target:
+      ratio_lte_0_10: negotiate_and_disclose
+      ratio_gt_0_10: emit_CONSTRAINT_VIOLATION
+
+  quote_normalization:
+    required_dimensions: [currency, quantity_tier, trade_term, packaging, tooling, certification, tax, additional_fees]
+    low_price_deviation_threshold: -0.20
+    low_price_action: rank_last_for_verification_and_check_material_or_intermediary_risk
+    price_weight_max_in_final_selection: 0.40
+
+  manufacturability:
+    result_enum: [existing_process, modification_required, new_tooling_required, infeasible]
+    every_core_feature_must_be_classified: true
+    rejection_requires: [technical_reason, evidence_refs, alternative, user_value_impact_request]
+
+  quality_and_delivery:
+    sample_does_not_equal_bulk_confirmation: true
+    pre_production_sample_required_before_bulk: true
+    bulk_same_line_and_material_standard_confirmation_required: true
+    third_party_inspection_acceptance_required: true
+    packaging_fee_tier_check_required: true
+    transport_precheck_attributes: [strong_magnet, battery, liquid, powder]
+
+state_machine:
+  canonical_states: [PENDING, READY, RUNNING, SUBMITTED, ACCEPTED, REVISE, BLOCKED, FAILED, CANCELLED]
+  transition_permissions:
+    gap2sku-supply:
+      PENDING: [READY]
+      READY: [RUNNING]
+      RUNNING: [SUBMITTED, FAILED]
+    gap2sku-product-architect:
+      SUBMITTED: [REVISE]
+      BLOCKED: [REVISE]
+    gap2sku-reviewer:
+      SUBMITTED: [BLOCKED]
+    acceptance-gate:
+      SUBMITTED: [ACCEPTED]
+  rules:
+    - worker_cannot_self_accept: true
+    - worker_cannot_self_block_for_business_reason: true
+    - revision_limit: 3
+    - every_transition_logged: [event, actor, timestamp, input_version, output_version]
+
+hard_constraints:
+  - id: SHC-01
+    rule: cannot_decide_user_demand_or_market_opportunity
+    enforcement: output_validator
+  - id: SHC-02
+    rule: cannot_calculate_or_commit_retail_price_profit_or_margin
+    enforcement: output_validator
+  - id: SHC-03
+    rule: cannot_issue_final_go_or_external_commercial_commitment
+    enforcement: framework
+  - id: SHC-04
+    rule: cannot_contact_supplier_place_order_sign_contract_or_pay
+    enforcement: tool_gateway
+  - id: SHC-05
+    rule: cannot_present_platform_quote_or_verbal_promise_as_factory_confirmed
+    enforcement: output_validator
+  - id: SHC-06
+    rule: cannot_present_synthetic_cached_stale_or_low_confidence_data_as_live_fact
+    enforcement: output_validator
+  - id: SHC-07
+    rule: cannot_modify_other_agents_artifacts
+    enforcement: framework
+  - id: SHC-08
+    rule: cannot_relax_class_a_veto_for_cost_moq_or_schedule
+    enforcement: output_validator
+  - id: SHC-09
+    rule: cannot_recommend_single_supplier_without_dependency_risk_and_backup_action
+    enforcement: output_validator
+
+escalation_triggers:
+  - id: SEP-01
+    condition: confirmed_class_a_veto
+    event: CONSTRAINT_VIOLATION
+    target: gap2sku-product-architect
+  - id: SEP-02
+    condition: core_feature_requires_new_tooling_or_is_infeasible
+    event: FEASIBILITY_FEEDBACK
+    target: [gap2sku-market, gap2sku-product-architect]
+  - id: SEP-03
+    condition: factory_cost_over_target_ratio > 0.10
+    event: CONSTRAINT_VIOLATION
+    target: gap2sku-product-architect
+  - id: SEP-04
+    condition: seasonal_delivery_misses_sales_window
+    event: CONSTRAINT_VIOLATION
+    target: gap2sku-product-architect
+  - id: SEP-05
+    condition: certification_or_transport_risk_unresolved
+    event: COMPLIANCE_FLAG
+    target: gap2sku-product-architect
+  - id: SEP-06
+    condition: key_supplier_evidence_insufficient_after_fallback
+    event: NEEDS_EVIDENCE
+    target: gap2sku-product-architect
+  - id: SEP-07
+    condition: accepted_cost_packaging_or_lead_time_changes
+    event: COST_UPDATE
+    target: [gap2sku-economics, gap2sku-product-architect]
+  - id: SEP-08
+    condition: validation_level_or_evidence_freshness_changes_key_conclusion
+    event: CONFIDENCE_CHANGED
+    target: gap2sku-product-architect
+
+budget:
+  scope: per_supply_task
+  max_total_tokens: 40000
+  max_output_tokens: 12000
+  max_tool_calls: 35
+  max_wall_clock_minutes: 20
+  max_child_tasks: 0
+  max_revision_rounds: 3
+  max_cost_usd: 0.80
+  warning_threshold: 0.80
+  on_exceed: emit_HANDOFF_with_budget_blocked_status_and_pause
+  external_wait_policy: create_human_checkpoint_not_hold_runtime_open
+
+skills:
+  default_policy: deny
+  allowed:
+    - {id: supplier-match, version: "^1.0"}
+    - {id: manufacturability-assessment, version: "^1.0"}
+    - {id: quote-normalization, version: "^1.0"}
+    - {id: supplier-due-diligence, version: "^1.0"}
+    - {id: sample-validation, version: "^1.0"}
+    - {id: packaging-logistics-check, version: "^1.0"}
+    - {id: compliance-precheck, version: "^1.0"}
+    - {id: evidence-quality-check, version: "^1.0"}
+    - {id: observability-summary, version: "^1.0"}
+  denied:
+    - market-analysis
+    - review-mining
+    - profit-analysis
+    - product-spec-synthesis
+    - acceptance-gate
+    - review-rule-engine
+  unknown_skill_behavior: deny_and_emit_permission_event
+
+tools:
+  - name: supplier_evidence_mcp
+    permissions: [search, read_supplier_record, read_quote, read_source_metadata]
+  - name: supplier_assessment_mcp
+    permissions: [normalize_quote, calculate_deviation, evaluate_constraints, build_screening_matrix]
+  - name: manufacturability_mcp
+    permissions: [read_process_catalog, evaluate_feature, compare_materials, estimate_tooling_class]
+  - name: certification_registry_mcp
+    permissions: [read_requirement, verify_certificate_reference]
+  - name: sample_quality_mcp
+    permissions: [read_test_result, evaluate_against_threshold, build_test_plan]
+  - name: packaging_logistics_mcp
+    permissions: [calculate_package_tier, check_transport_attribute, compare_packaging_options]
+  - name: artifact_store
+    permissions: [read, append_version]
+    writable_types:
+      - supplier-assessment
+      - supplier-screening-matrix
+      - manufacturability-feedback
+      - supply-risk-register
+      - supply-evidence-index
+      - validated-supplier-knowledge
+  - name: task_store
+    permissions: [read_current_task, report_status]
+  - name: schema_validator
+    permissions: [validate]
+  - name: memory
+    permissions: [read_session, read_supply_knowledge, write_validated_supply_knowledge]
+  - name: notification
+    permissions: [emit_registered_event]
+
+tool_denials:
+  - supplier_platform_write
+  - supplier_contact_or_message
+  - procurement
+  - purchase_order
+  - contract_signature
+  - payment
+  - economics_profit_calculator
+  - product_spec_write
+  - reviewer_rule_execution
+  - listing_publish
+
+memory_scope:
+  policy_ref: ./memory.scope
+  default_access: deny
+  read_scope: [current_root_task, same_project_category_market]
+  write_scope: [validated_supply_knowledge_only]
+  write_policy: append_versioned_records_only
+  never_store:
+    - api_keys
+    - credentials
+    - hidden_chain_of_thought
+    - personal_contact_details
+    - bank_or_payment_information
+    - current_supplier_quotes
+    - unverified_external_instructions
+
+degradation:
+  supplier_source_unavailable:
+    action: switch_fallback_source_once
+    then: submit_partial_and_emit_NEEDS_EVIDENCE
+  candidate_coverage_insufficient:
+    action: disclose_actual_coverage_and_concentration_risk
+    then: submit_partial_or_emit_NEEDS_EVIDENCE
+  sample_not_available_within_task_window:
+    action: downgrade_to_quoted_and_create_human_checkpoint
+  quote_stale:
+    action: prohibit_as_key_cost_support_and_request_refresh
+  certificate_unverifiable:
+    action: apply_class_a_veto_or_emit_COMPLIANCE_FLAG_when_requirement_uncertain
+  schema_invalid_output:
+    action: self_repair_once
+    then: pause_and_notify_leader
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  model_call_failure:
+    action: retry_then_submit_partial_or_emit_HANDOFF_and_pause
+
+observability:
+  log_every_tick:
+    - tick_trigger
+    - chosen_actions
+    - source_refs
+    - evidence_gaps
+    - output_artifact_refs
+  log_every_event: [event_id, type, from, to, confidence, data_mode]
+  metrics:
+    - candidate_count
+    - shortlist_count
+    - sampled_supplier_count
+    - class_a_check_completion_ratio
+    - class_b_check_completion_ratio
+    - quote_normalization_ratio
+    - fresh_quote_ratio
+    - feature_manufacturability_coverage_ratio
+    - primary_backup_coverage_ratio
+    - evidence_traceability_ratio
+    - supplier_concentration_risk_count
+    - unresolved_compliance_flag_count
+    - cost_update_latency_seconds
+    - tool_call_success_rate
+    - task_latency_seconds
+    - tokens_consumed
+    - revision_rounds_used
+
+eval:
+  replayable: true
+  fixture_modes: [synthetic, cached]
+  required_cases:
+    - sufficient_evidence_primary_and_backup_success
+    - class_a_material_veto
+    - unverifiable_certification_veto
+    - low_price_outlier_requires_verification
+    - stale_quote_partial
+    - core_feature_requires_new_tooling
+    - seasonal_window_missed
+    - supplier_cost_update_invalidates_downstream
+    - reviewer_traceability_failure
+  pass_conditions:
+    - class_a_check_completion_ratio == 1.0
+    - feature_manufacturability_coverage_ratio == 1.0
+    - evidence_traceability_ratio == 1.0
+    - synthetic_data_mislabeled_as_live == 0
+    - unauthorized_tool_calls == 0

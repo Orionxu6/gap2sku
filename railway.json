@@ -1,0 +1,11 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.review"
+  },
+  "deploy": {
+    "healthcheckPath": "/api/status",
+    "healthcheckTimeout": 120
+  }
+}

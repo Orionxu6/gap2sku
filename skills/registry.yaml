@@ -1,0 +1,74 @@
+registry_version: 1
+skills:
+  - name: demo-data-loader
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-product-architect]
+    input_schemas: [FixtureManifest@1.0.0]
+    output_schemas: [VersionedSnapshot@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_demo_data_loader.py
+  - name: market-evidence-mining
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-market]
+    input_schemas: [ReviewSnapshot@1.0.0, ConstraintSet@1.0.0]
+    output_schemas: [PainPointSet@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_market_evidence_mining.py
+  - name: supplier-capability-assessment
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-supply]
+    input_schemas: [FeatureHypothesisSet@1.0.0, SupplierSnapshot@1.0.0, ConstraintSet@1.0.0]
+    output_schemas: [SupplierAssessment@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_supplier_assessment.py
+  - name: unit-economics-evaluation
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-economics]
+    input_schemas: [SupplierAssessment@1.0.0, FeeTable@1.0.0, ConstraintSet@1.0.0]
+    output_schemas: [EconomicsArtifact@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_economics.py
+  - name: product-spec-synthesis
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-product-architect]
+    input_schemas: [ArtifactSet@1.0.0, ConstraintSet@1.0.0]
+    output_schemas: [ProductSpec@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_spec_synthesis.py
+  - name: product-concept-synthesis
+    version: 0.2.0
+    owner: gap2sku
+    agents: [gap2sku-prototype-designer]
+    input_schemas: [OpportunityBrief@1.0.0, CategoryProfile@1.0.0]
+    output_schemas: [ProductConceptSet@1.0.0, SampleSpec@1.0.0, RenderManifest@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_product_workflow_v3.py
+  - name: compliance-safety-assessment
+    version: 0.2.0
+    owner: gap2sku
+    agents: [gap2sku-compliance]
+    input_schemas: [ProductIntake@1.0.0, SampleSpec@1.0.0, CompliancePolicyPack@1.0.0]
+    output_schemas: [ComplianceAssessment@1.0.0, TestMatrix@1.0.0, ClaimRegister@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_reviewer_rules.py
+  - name: evidence-review-gate
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-reviewer]
+    input_schemas: [ProductSpec@1.0.0, ArtifactSubgraph@1.0.0, RuleResults@1.0.0]
+    output_schemas: [ReviewResult@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_reviewer_rules.py
+  - name: impact-aware-replanning
+    version: 0.1.0
+    owner: gap2sku
+    agents: [gap2sku-product-architect]
+    input_schemas: [ChangeEvent@1.0.0, ArtifactGraph@1.0.0]
+    output_schemas: [ImpactPlan@1.0.0]
+    license: Apache-2.0
+    tests: tests/unit/test_replanning.py

@@ -1,0 +1,69 @@
+meta:
+  agent_id: gap2sku-prototype-designer
+  role: specialist_worker
+  specialization: concept_sample_spec_and_render_provenance
+  version: 1.0.0
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${PROTOTYPE_MODEL_NAME}"
+  temperature: 0.2
+  max_output_tokens: 4096
+  timeout_ms: 90000
+planner:
+  type: event_driven
+event_subscriptions:
+  TASK_ASSIGNMENT: {from: [gap2sku-product-architect]}
+  FEASIBILITY_FEEDBACK: {from: [gap2sku-supply]}
+  COMPLIANCE_FLAG: {from: [gap2sku-compliance]}
+  REVISION_REQUIRED: {from: [gap2sku-reviewer, gap2sku-product-architect]}
+event_emissions: [HANDOFF, CONSULT, MODEL_DEGRADED, HUMAN_DECISION_REQUIRED]
+event_routing:
+  HANDOFF: [gap2sku-product-architect]
+  CONSULT: [gap2sku-supply, gap2sku-compliance]
+  MODEL_DEGRADED: [audit-manager, human-manager]
+  HUMAN_DECISION_REQUIRED: [human-manager, gap2sku-product-architect]
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+completion_signal:
+  strategy: artifact_submission_and_task_status
+io:
+  inputs:
+    task_contract: {schema_ref: ./schemas/task-contract.schema.json}
+  outputs:
+    product_concepts: {schema_ref: ./schemas/product-concept-set.schema.json}
+    sample_spec: {schema_ref: ./schemas/sample-spec.schema.json}
+    render_manifest: {schema_ref: ./schemas/render-manifest.schema.json}
+budget:
+  max_tool_calls: 18
+  max_render_calls: 4
+skills:
+  default_policy: deny
+  unknown_skill_behavior: deny_and_emit_permission_event
+  allowed:
+    - {id: product-concept-synthesis}
+    - {id: evidence-conflict-decision}
+tools:
+  - {name: image_generation_mcp, access: execute}
+  - {name: sample_spec_mcp, access: read_write_draft}
+  - {name: artifact_store, access: scoped}
+tool_denials: [supplier_contact, purchasing, certification_submission]
+memory_scope:
+  mode: project_scoped
+degradation:
+  on_model_failure: emit_MODEL_DEGRADED_and_use_versioned_replay_asset
+observability:
+  require_trace: true
+eval:
+  required: true

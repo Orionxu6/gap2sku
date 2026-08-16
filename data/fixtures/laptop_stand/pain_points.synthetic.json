@@ -1,0 +1,35 @@
+{
+  "is_synthetic": true,
+  "pain_points": [
+    {
+      "pain_point_id": "pain-wobbling",
+      "label": "Stand wobbles while typing",
+      "severity": "high",
+      "feature": "wider_base"
+    },
+    {
+      "pain_point_id": "pain-slipping",
+      "label": "Stand slides on desk / scratches laptop",
+      "severity": "high",
+      "feature": "silicone_pad"
+    },
+    {
+      "pain_point_id": "pain-compatibility",
+      "label": "Does not fit 16-inch laptop",
+      "severity": "medium",
+      "feature": "16_inch_compatibility"
+    },
+    {
+      "pain_point_id": "pain-angle",
+      "label": "Limited viewing angles",
+      "severity": "medium",
+      "feature": "double_axis"
+    },
+    {
+      "pain_point_id": "pain-ergonomics",
+      "label": "Not height adjustable",
+      "severity": "low",
+      "feature": "height_adjustable"
+    }
+  ]
+}

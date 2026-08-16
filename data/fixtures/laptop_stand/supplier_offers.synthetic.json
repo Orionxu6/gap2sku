@@ -1,0 +1,125 @@
+{
+  "is_synthetic": true,
+  "offers": [
+    {
+      "supplier_id": "SUP-A",
+      "offer_id": "OFFER-A1",
+      "feature_id": "wider_base",
+      "support_state": "confirmed",
+      "existing_mold": true,
+      "moq": 200,
+      "base_unit_cost": "5.20",
+      "cost_delta": "0.80",
+      "lead_time_days": 15,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-B",
+      "offer_id": "OFFER-B1",
+      "feature_id": "wider_base",
+      "support_state": "confirmed",
+      "existing_mold": true,
+      "moq": 100,
+      "base_unit_cost": "5.50",
+      "cost_delta": "0.80",
+      "lead_time_days": 10,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-B",
+      "offer_id": "OFFER-B2",
+      "feature_id": "silicone_pad",
+      "support_state": "confirmed",
+      "existing_mold": true,
+      "moq": 100,
+      "base_unit_cost": "5.50",
+      "cost_delta": "0.30",
+      "lead_time_days": 10,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-B",
+      "offer_id": "OFFER-B3",
+      "feature_id": "16_inch_compatibility",
+      "support_state": "confirmed",
+      "existing_mold": true,
+      "moq": 100,
+      "base_unit_cost": "5.50",
+      "cost_delta": "0.40",
+      "lead_time_days": 10,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-C",
+      "offer_id": "OFFER-C1",
+      "feature_id": "stiffened_hinge",
+      "support_state": "listed",
+      "existing_mold": false,
+      "moq": 500,
+      "base_unit_cost": "4.80",
+      "cost_delta": "1.20",
+      "lead_time_days": 30,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-C",
+      "offer_id": "OFFER-C2",
+      "feature_id": "double_axis",
+      "support_state": "listed",
+      "existing_mold": false,
+      "moq": 500,
+      "base_unit_cost": "4.80",
+      "cost_delta": "1.50",
+      "lead_time_days": 30,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-D",
+      "offer_id": "OFFER-D1",
+      "feature_id": "height_adjustable",
+      "support_state": "listed",
+      "existing_mold": true,
+      "moq": 300,
+      "base_unit_cost": "6.10",
+      "cost_delta": "1.10",
+      "lead_time_days": 20,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-E",
+      "offer_id": "OFFER-E1",
+      "feature_id": "carbon_fiber_structure",
+      "support_state": "listed",
+      "existing_mold": false,
+      "moq": 1000,
+      "base_unit_cost": "9.50",
+      "cost_delta": "3.50",
+      "lead_time_days": 45,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-F",
+      "offer_id": "OFFER-F1",
+      "feature_id": "wider_base",
+      "support_state": "unsupported",
+      "existing_mold": false,
+      "moq": 2000,
+      "base_unit_cost": "4.00",
+      "cost_delta": "0.00",
+      "lead_time_days": 60,
+      "verification_level": "platform_visible"
+    },
+    {
+      "supplier_id": "SUP-G",
+      "offer_id": "OFFER-G1",
+      "feature_id": "silicone_pad",
+      "support_state": "conflict",
+      "existing_mold": true,
+      "moq": 100,
+      "base_unit_cost": "7.20",
+      "cost_delta": "0.30",
+      "lead_time_days": 10,
+      "verification_level": "platform_visible"
+    }
+  ]
+}

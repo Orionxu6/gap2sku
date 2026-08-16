@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gap2SKU · Product Story</title>
+  <link rel="stylesheet" href="/static/story.css?v=3.0.3">
+</head>
+<body>
+  <header class="story-nav">
+    <a class="story-brand" href="/"><span>G</span><b>Gap2SKU</b><i></i><strong>Product Story</strong></a>
+    <nav class="view-tabs" aria-label="方案视图">
+      <button class="active" data-view="internal" type="button">内部完整版</button>
+      <button data-view="supplier" type="button">供应商 RFQ 版</button>
+      <button data-view="judge" type="button">评委演示版</button>
+    </nav>
+    <div class="story-actions">
+      <select id="story-project" aria-label="选择 Product Story 项目">
+        <option value="nap-pillow">学生午睡枕 · 真实证据</option>
+        <option value="desk-public">桌边耳机挂架 · 公开信号</option>
+        <option value="desk-synthetic">桌边耳机挂架 · 合成回归</option>
+      </select>
+      <span id="story-mode">—</span>
+      <button id="print-button" type="button">打印 / 导出 PDF</button>
+    </div>
+  </header>
+
+  <main id="story-root">
+    <section class="story-loading"><i></i><p>正在生成版本化 Product Story…</p></section>
+  </main>
+
+  <template id="story-template">
+    <article class="product-story">
+      <section class="hero section-white">
+        <div class="hero-copy">
+          <p class="kicker">DECISION-TO-SAMPLE PACK · <span data-field="version"></span></p>
+          <h1 data-field="title"></h1>
+          <p class="hero-subtitle" data-field="subtitle"></p>
+          <div class="verdict-row">
+            <span class="verdict" data-field="recommendation"></span>
+            <p data-field="verdict-copy"></p>
+          </div>
+          <div class="hero-meta">
+            <span>SampleSpec <b data-field="spec-status"></b></span>
+            <span>Policy <b data-field="policy-version">policy-v3.0.0</b></span>
+            <span>Data <b data-field="data-mode"></b></span>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <img data-field="hero-image" alt="选中产品概念效果图">
+          <span>SYNTHETIC_CONCEPT · 非 CAD / 非安全证据</span>
+        </div>
+      </section>
+
+      <section class="story-summary">
+        <div><small>证据记录</small><strong data-field="evidence-count"></strong><p>来源、时间与边界可追溯</p></div>
+        <div><small>概念方案</small><strong>3</strong><p>一套推荐、两套保留对照</p></div>
+        <div><small>RFQ 状态</small><strong data-field="rfq-status"></strong><p>真实响应才可验证成本</p></div>
+        <div><small>Reviewer</small><strong data-field="review-result"></strong><p>独立确定性门禁</p></div>
+      </section>
+
+      <section class="section section-white" data-section="evidence">
+        <header class="section-head"><p>01 · EVIDENCE</p><h2>用户痛点，不等于产品答案</h2><span>证据来自评论；制造、成本和合规仍需各自证明。</span></header>
+        <div class="pain-grid" data-field="pain-points"></div>
+        <div class="boundary-note" data-field="evidence-limitations"></div>
+      </section>
+
+      <section class="section concepts-section" data-section="concepts">
+        <header class="section-head light"><p>02 · CONCEPT OPTIONS</p><h2>三套概念，同一痛点链的不同取舍</h2><span>Leader 组织冲突，Prototype Designer 产出候选；Human Manager 锁定方向。</span></header>
+        <div class="concept-grid" data-field="concepts"></div>
+      </section>
+
+      <section class="section section-white spec-section" data-section="sample_spec">
+        <header class="section-head"><p>03 · LOCKED SAMPLE SPEC</p><h2>从效果图进入可询价规格</h2><span>图片只表达意图；供应商以尺寸、材料、结构、公差和测试条款为准。</span></header>
+        <div class="spec-layout">
+          <div class="annotated-board">
+            <img data-field="annotated-image" src="/static/assets/concepts/concept-a.png" alt="锁定概念参数标注图">
+            <span class="callout c1" data-field="dimension-1">295 mm <i></i></span>
+            <span class="callout c2" data-field="dimension-2">235 mm <i></i></span>
+            <span class="callout c3" data-field="dimension-3">95 mm MAX <i></i></span>
+            <b>SYNTHETIC_CONCEPT</b>
+          </div>
+          <div class="spec-table" data-field="sample-spec"></div>
+        </div>
+      </section>
+
+      <section class="section commerce-section" data-section="supplier_rfq">
+        <header class="section-head"><p>04 · SUPPLY & RFQ</p><h2>找供应商之前，先把问题问完整</h2><span>候选供应商不是制造能力证明；只有可追溯报价、样品与测试响应才能升级证据。</span></header>
+        <div class="commerce-grid">
+          <div class="rfq-card"><h3>RFQ Pack</h3><div data-field="rfq"></div></div>
+          <div class="supplier-funnel"><h3>Supplier Funnel</h3><ol><li><b>发现候选</b><span>公开目录 / 授权 API / 用户导入</span></li><li><b>能力预筛</b><span>工艺、MOQ、市场与文件能力</span></li><li><b>发出 RFQ</b><span>规格 + 图片 + 测试 + 包装</span></li><li><b>样品验证</b><span>打样、耐久、材料与一致性</span></li></ol></div>
+        </div>
+      </section>
+
+      <section class="section section-white" data-section="economics">
+        <header class="section-head"><p>05 · ECONOMICS</p><h2>成本未确认，利润就不能被“算出来”</h2><span>目标值、估算值与供应商事实严格分开。</span></header>
+        <div class="economics-grid" data-field="economics"></div>
+      </section>
+
+      <section class="section safety-section" data-section="compliance">
+        <header class="section-head"><p>06 · COMPLIANCE & SAFETY</p><h2>材料、测试、标签与宣称逐项过门</h2><span>法规知识提供规则，不能替代产品事实和测试报告。</span></header>
+        <div class="safety-layout">
+          <div class="check-list" data-field="compliance"></div>
+          <div class="test-matrix" data-field="tests"></div>
+        </div>
+      </section>
+
+      <section class="section section-white" data-section="review">
+        <header class="section-head"><p>07 · INDEPENDENT REVIEW</p><h2 data-field="review-heading">Reviewer 独立结论</h2><span data-field="review-subtitle">Reviewer 不能被 Leader、LLM 或人工说明绕过。</span></header>
+        <div class="review-layout">
+          <div class="review-score"><small>FINAL RECOMMENDATION</small><strong data-field="review-verdict"></strong><p data-field="review-next"></p></div>
+          <div class="finding-list" data-field="findings"></div>
+        </div>
+      </section>
+
+      <section class="section audit-section">
+        <header class="section-head light"><p>08 · AUDIT APPENDIX</p><h2>每个结论都能回到任务、规则与原始证据</h2><span data-field="spec-hash"></span></header>
+        <div class="artifact-list" data-field="artifact-refs"></div>
+      </section>
+    </article>
+  </template>
+
+  <script src="/static/vendor/motion.js?v=3.0.1"></script>
+  <script src="/static/vendor/motion-fallback.js?v=3.0.1"></script>
+  <script src="/static/story.js?v=3.0.2"></script>
+</body>
+</html>

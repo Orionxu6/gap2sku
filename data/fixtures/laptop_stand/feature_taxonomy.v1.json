@@ -1,0 +1,59 @@
+{
+  "is_synthetic": true,
+  "features": [
+    {
+      "feature_id": "wider_base",
+      "label": "Wider base for stability",
+      "cost_delta": "0.80",
+      "pain_refs": [
+        "pain-wobbling"
+      ]
+    },
+    {
+      "feature_id": "silicone_pad",
+      "label": "Anti-slip silicone pads",
+      "cost_delta": "0.30",
+      "pain_refs": [
+        "pain-slipping"
+      ]
+    },
+    {
+      "feature_id": "stiffened_hinge",
+      "label": "Stiffened hinge mechanism",
+      "cost_delta": "1.20",
+      "pain_refs": [
+        "pain-wobbling"
+      ]
+    },
+    {
+      "feature_id": "double_axis",
+      "label": "Double-axis rotation",
+      "cost_delta": "1.50",
+      "pain_refs": [
+        "pain-angle"
+      ]
+    },
+    {
+      "feature_id": "height_adjustable",
+      "label": "Height adjustable",
+      "cost_delta": "1.10",
+      "pain_refs": [
+        "pain-ergonomics"
+      ]
+    },
+    {
+      "feature_id": "16_inch_compatibility",
+      "label": "16-inch laptop compatibility",
+      "cost_delta": "0.40",
+      "pain_refs": [
+        "pain-compatibility"
+      ]
+    },
+    {
+      "feature_id": "carbon_fiber_structure",
+      "label": "Carbon fiber structure",
+      "cost_delta": "3.50",
+      "pain_refs": []
+    }
+  ]
+}

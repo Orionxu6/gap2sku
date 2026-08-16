@@ -1,0 +1,436 @@
+# ============================================================================
+# Gap2SKU - Leader Agent 契约配置
+# agent_id: gap2sku-product-architect
+# 版本: v1.1
+# 对齐: SOUL_leader_v2.md + COLLABORATION_PROTOCOL_v2.md
+# 读者: 编排框架（非 LLM）。LLM 人格层见 soul_ref。
+# 设计原则: 事件驱动 planner——本文件不定义执行顺序，只定义
+#           "观察到什么事件 → 允许采取什么动作"，路径由运行时现场决定。
+# ============================================================================
+
+meta:
+  agent_id: gap2sku-product-architect
+  runtime_aliases: [gap2sku-leader]
+  role: leader
+  version: 1.1.0
+  package_layout_version: 1
+  soul_ref: ./SOUL.md                     # 人格层：身份/权限/优先级/风格
+  protocol_ref: ./AGENTS.md               # Agent 协作接口契约
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  collaborators:                          # 统一词表，禁止其他命名
+    - gap2sku-market
+    - gap2sku-supply
+    - gap2sku-economics
+    - gap2sku-reviewer
+    - human-manager
+
+# 本文件是 Gap2SKU Domain Runtime 的契约，不是 AgentTeams 原生 Worker CRD。
+# 未安装并注册 Loader 时必须启动失败，禁止静默退化成“仅文档生效”。
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+
+# ----------------------------------------------------------------------------
+# 模型配置（框架按此实例化；参赛环境可替换为任意兼容模型）
+# ----------------------------------------------------------------------------
+model:
+  provider: "${MODEL_PROVIDER}"           # 环境变量注入，不写死厂商
+  name: "${LEADER_MODEL_NAME}"
+  temperature: 0.2                        # 规划者要稳定，不要发散
+  max_output_tokens: 4096
+  timeout_ms: 60000
+  required_capabilities: [json_output, tool_calls]
+  provider_options:
+    deepseek:
+      thinking: enabled
+      reasoning_effort: high
+  retry:
+    max_attempts: 2
+    backoff_ms: [2000, 5000]
+    retry_on: [timeout, rate_limited, transport_error, temporary_provider_error]
+    never_retry_on: [schema_invalid, permission_denied, reviewer_block, hard_constraint_violation]
+    on_failure: pause                     # 见 degradation 节；不得静默换模后继续验收
+
+# ----------------------------------------------------------------------------
+# 规划循环（planner loop）——Leader 的"判断循环"，每个 tick 执行一次
+# ----------------------------------------------------------------------------
+planner:
+  type: event_driven
+  tick_trigger:                           # 什么唤醒 planner（没有固定主流程）
+    - event_received                      # 新事件进入本人队列
+    - artifact_submitted                  # 任一 Worker 提交产物
+    - artifact_invalidated                # 失效规则传播触达本人产物
+    - human_response_received             # Manager 闸口回复
+    - budget_threshold_reached            # 消耗达 80%
+
+  # 每个 tick 的固定思维步骤（prompt 骨架，顺序固定，结论不固定）
+  reasoning_steps:
+    - read_task_contract_and_constraints  # 读任务契约与硬约束
+    - read_product_memory_priors          # 读历史先验（相似品类决策与失效条件）
+    - inspect_artifact_graph              # 看产物状态：valid / stale / 缺口
+    - inspect_open_events_and_risks       # 看待处理事件、未解决冲突、风险
+    - check_human_checkpoints             # 是否触发强制暂停（见 human_checkpoints）
+    - check_budget_and_revision_limits    # 预算 80% / revision_count 上限
+    - choose_actions                      # 从 allowed_actions 选 0..n 个
+    - emit_actions_with_evidence          # 动作必须带 artifact_refs 与理由
+
+  # 允许的全部调度动作（动作空间是封闭的，防止框架外行为）
+  allowed_actions:
+    - action: dispatch_task               # 派发/重派子任务
+      requires: [task_definition, target_agent, input_refs, acceptance_criteria]
+    - action: request_evidence            # 发起补证（NEEDS_EVIDENCE 响应）
+      requires: [target_agent, evidence_gap, deadline_or_round]
+    - action: trigger_partial_rerun       # 按失效规则局部重跑 DAG 节点
+      requires: [invalidated_artifact_refs, affected_scope]
+    - action: consult_agent               # 发起 CONSULT 咨询
+      requires: [target_agent, question, context_refs]
+    - action: resolve_conflict            # 收敛冲突，输出 DecisionRecord
+      requires: [both_side_refs, conflict_type, options]  # options >= 2
+    - action: integrate_product_spec      # 整合已验收产物生成/更新 Spec
+      requires: [accepted_artifacts]
+      guard: all_inputs_accepted_and_valid
+    - action: propose_early_no_go         # 提议提前终止（须人类确认）
+      requires: [evidence_refs, reason, resources_consumed]
+    - action: escalate_human              # 触发人类介入点，任务设置 human_hold
+      requires: [checkpoint_id, decision_brief, options]
+    - action: submit_to_reviewer          # 提交整合产物给 Reviewer
+      requires: [product_spec_ref, decision_record_ref]
+    - action: run_acceptance_gate         # Reviewer PASS 后运行验收门禁
+      requires: [review_report_ref]
+      guard: review_result_in [PASS]
+    - action: write_memory                # 回写 Product Memory（任务结束时必须）
+      requires: [decision_record_ref, assumption_outcomes]
+    - action: wait                        # 显式空转：无充分依据时不得强行动作
+
+# ----------------------------------------------------------------------------
+# 事件订阅与候选动作（路由提示，不是流程图——动作由 planner 现场选择）
+# ----------------------------------------------------------------------------
+event_subscriptions:
+  HANDOFF:
+    from: [gap2sku-market, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [dispatch_task, integrate_product_spec, wait]
+  EVIDENCE_CHALLENGE:
+    from: [gap2sku-market, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [resolve_conflict, request_evidence, escalate_human]
+  FEASIBILITY_FEEDBACK:
+    from: [gap2sku-supply]
+    candidate_actions: [resolve_conflict, dispatch_task, escalate_human]   # 放宽约束必须 escalate
+  CONSTRAINT_VIOLATION:
+    from: [gap2sku-supply, gap2sku-market, gap2sku-economics]
+    candidate_actions: [resolve_conflict, escalate_human, propose_early_no_go]
+  COMPLIANCE_FLAG:
+    from: [gap2sku-supply, gap2sku-reviewer]
+    candidate_actions: [escalate_human]            # 合规不确定只允许升级，不允许自决
+  NEEDS_EVIDENCE:
+    from: [gap2sku-market, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [request_evidence, escalate_human, propose_early_no_go]
+  EARLY_NO_GO_SIGNAL:
+    from: [gap2sku-market]
+    candidate_actions: [propose_early_no_go, request_evidence]
+  RISK_ALERT:
+    from: [gap2sku-economics, gap2sku-reviewer]
+    candidate_actions: [resolve_conflict, escalate_human]
+  PRICE_VIABILITY_REQUEST:
+    from: [gap2sku-market, gap2sku-economics]
+    candidate_actions: [dispatch_task]             # 路由给对方 Agent
+  COST_CLARIFICATION_REQUEST:
+    from: [gap2sku-economics]
+    candidate_actions: [dispatch_task]             # 路由给 Supply
+  COST_UPDATE:
+    from: [gap2sku-supply]
+    candidate_actions: [trigger_partial_rerun]     # 失效 Economics/Spec/Review
+  CONFIDENCE_CHANGED:
+    from: [gap2sku-market, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [escalate_human, wait]      # 双源偏差>20%时升级
+  REVIEW_FINDING:
+    from: [gap2sku-reviewer]
+    candidate_actions: [dispatch_task]             # 按责任角色路由整改
+  REVISION_REQUIRED:
+    from: [gap2sku-reviewer]
+    candidate_actions: [dispatch_task, trigger_partial_rerun]
+    guard: revision_count_below_limit
+  HUMAN_DECISION:
+    from: [human-manager]
+    candidate_actions: [dispatch_task, integrate_product_spec, run_acceptance_gate, write_memory]
+    guard: human_decision_payload_valid
+
+# ----------------------------------------------------------------------------
+# 可发出的事件（协议 §6 白名单的子集）
+# ----------------------------------------------------------------------------
+event_emissions:
+  - TASK_ASSIGNMENT
+  - CONSULT
+  - DECISION_REQUEST
+  - DECISION_RECORD
+  - EARLY_NO_GO_SIGNAL        # 转发/附议 Market 信号时用
+  - HUMAN_DECISION_REQUIRED
+  - REVISION_REQUIRED
+  - HANDOFF
+  - MODEL_DEGRADED
+  - BUDGET_WARNING
+
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+  reject_unknown_event: true
+  require_artifact_refs_for:
+    - EVIDENCE_CHALLENGE
+    - FEASIBILITY_FEEDBACK
+    - CONSTRAINT_VIOLATION
+    - COST_UPDATE
+    - RISK_ALERT
+    - REVIEW_FINDING
+    - DECISION_RECORD
+
+# ----------------------------------------------------------------------------
+# 输入 / 输出契约
+# ----------------------------------------------------------------------------
+io:
+  inputs:
+    task_contract:
+      schema_ref: ./schemas/task-contract.schema.json
+      required_on: [task_start]
+    artifacts:
+      consumed_types:
+        - demand-structure          # Market v2.1
+        - pain-point-set
+        - competitor-gap-map
+        - feature-hypotheses
+        - supplier-assessment
+        - supplier-screening-matrix
+        - manufacturability-feedback
+        - supply-risk-register
+        - unit-economics
+        - cost-stack
+        - sensitivity-analysis
+        - compliance-risk-report
+        - review-report
+        - review-findings
+      acceptance_rule: only_accepted_and_valid   # 只整合已验收且 valid 的产物
+    events:
+      schema_ref: ./schemas/collab-event.schema.json
+
+  outputs:
+    product_spec:
+      schema_ref: ./schemas/product-spec.schema.json
+      required_fields: [positioning, target_user, core_selling_points, key_specs,
+                        supply_requirements, profit_model, risk_assumptions,
+                        evidence_refs, confidence, data_mode]
+    decision_record:
+      schema_ref: ./schemas/decision-record.schema.json
+      required_fields: [recommendation, alternatives_with_reject_reasons,
+                        supporting_artifact_refs, key_assumptions, invalidation_conditions,
+                        veto_check_results, pending_human_items, downstream_impact]
+      recommendation_enum: [GO, REVISE, NO_GO, UNDECIDED]
+    risk_register:
+      schema_ref: ./schemas/risk-register.schema.json
+    open_questions:
+      schema_ref: ./schemas/open-questions.schema.json
+    impact_plan:
+      schema_ref: ./schemas/impact-plan.schema.json
+    decision_brief:                  # 人类 Manager 的一页审批视图
+      schema_ref: ./schemas/decision-brief.schema.json
+      required_fields: [recommendation, evidence_summary, risk_summary,
+                        pending_confirmations, executed_checkpoints, approval_actions]
+
+# ----------------------------------------------------------------------------
+# 状态机权限（协议 §4；按角色限制转换，不允许 Leader 自行 BLOCK/ACCEPT）
+# ----------------------------------------------------------------------------
+state_machine:
+  canonical_states: [PENDING, READY, RUNNING, SUBMITTED, ACCEPTED,
+                     REVISE, BLOCKED, FAILED, CANCELLED]
+  transition_permissions:
+    gap2sku-product-architect:
+      PENDING: [READY, CANCELLED]
+      READY: [RUNNING, CANCELLED]
+      RUNNING: [SUBMITTED, FAILED, CANCELLED]
+      SUBMITTED: [REVISE]
+      BLOCKED: [REVISE]
+    gap2sku-reviewer:
+      SUBMITTED: [BLOCKED]
+    acceptance-gate:
+      SUBMITTED: [ACCEPTED]
+    human-manager:
+      PENDING: [CANCELLED]
+      READY: [CANCELLED]
+      RUNNING: [CANCELLED]
+      SUBMITTED: [REVISE, CANCELLED]
+      BLOCKED: [REVISE, CANCELLED]
+  rules:
+    - worker_cannot_self_accept: true       # Worker 最多 SUBMITTED
+    - revision_limit: 3                     # 超限禁止新增 revision，只能 escalate_human
+    - every_transition_logged: [event, actor, timestamp, input_version, output_version]
+  human_hold:
+    flag: awaiting_human_decision
+    task_state_while_active: RUNNING
+    blocked_actions: [dispatch_task, integrate_product_spec, submit_to_reviewer, run_acceptance_gate]
+    allowed_actions: [wait, escalate_human]
+    release_event: HUMAN_DECISION
+
+# ----------------------------------------------------------------------------
+# 硬约束（来自 SOUL，框架级强制执行，不依赖模型自觉）
+# ----------------------------------------------------------------------------
+hard_constraints:
+  - id: HC-01
+    rule: cannot_override_reviewer_block   # BLOCK 只能通过新 revision 重新评审
+    enforcement: framework
+  - id: HC-02
+    rule: cannot_modify_others_artifacts   # 只可 reject，不可改内容
+    enforcement: framework
+  - id: HC-03
+    rule: cannot_commit_externally         # 生产/采购/上架/资金承诺必须人类批准
+    enforcement: framework
+  - id: HC-04
+    rule: cannot_downgrade_compliance_uncertainty
+    enforcement: framework
+  - id: HC-05
+    rule: cannot_skip_human_checkpoint     # 见 human_checkpoints，命中即强制 escalate
+    enforcement: framework
+  - id: HC-06
+    rule: cannot_present_speculation_as_fact   # 输出校验：无 evidence_id 的结论性陈述拦截
+    enforcement: output_validator
+  - id: HC-07
+    rule: cannot_hide_risks_or_conflicts
+    enforcement: output_validator
+
+# ----------------------------------------------------------------------------
+# 人类介入点（命中任一条件，框架强制设置 human_hold，模型无法绕过）
+# ----------------------------------------------------------------------------
+human_checkpoints:
+  - id: CP-01
+    condition: assumption_dual_source_deviation > 0.20   # 搜索量/CPC/退货率
+  - id: CP-02
+    condition: first_funding_commitment_formed            # 首单备货量/开模费/模具投入
+  - id: CP-03
+    condition: pricing_plan_ready_for_final_approval OR pricing_deviation_ratio > 0.10
+  - id: CP-04
+    condition: review_revision_rounds >= 2
+  - id: CP-05
+    condition: compliance_uncertain AND category_sensitive in [child, electronics, food_contact, medical]
+  - id: CP-06
+    condition: early_no_go_proposed OR veto_item_triggered
+  - id: CP-07
+    condition: budget_consumed_ratio >= 0.80
+
+# ----------------------------------------------------------------------------
+# 预算与配额
+# ----------------------------------------------------------------------------
+budget:
+  scope: per_root_task
+  max_total_tokens: 100000                 # 首版默认值，按 Metrics 再调优
+  max_output_tokens: 16000
+  max_tool_calls: 60
+  max_wall_clock_minutes: 30
+  max_child_tasks: 12
+  max_revision_rounds: 3
+  max_cost_usd: 2.00
+  warning_threshold: 0.80                  # 触发 CP-07
+  on_exceed: escalate_human                # 不自动续杯
+
+# ----------------------------------------------------------------------------
+# Skill 白名单（与工具权限分离；未知 Skill 默认拒绝）
+# ----------------------------------------------------------------------------
+skills:
+  default_policy: deny
+  allowed:
+    - id: task-planning
+      version: "^1.0"
+    - id: artifact-graph-query
+      version: "^1.0"
+    - id: product-spec-synthesis
+      version: "^1.0"
+    - id: decision-record
+      version: "^1.0"
+    - id: failure-loopback
+      version: "^1.0"
+    - id: acceptance-gate
+      version: "^1.0"
+    - id: observability-summary
+      version: "^1.0"
+  denied:
+    - market-analysis
+    - review-mining
+    - supplier-match
+    - profit-analysis
+    - compliance-check
+  unknown_skill_behavior: deny_and_emit_permission_event
+
+# ----------------------------------------------------------------------------
+# 工具 / Skill 白名单（只能调这些，防止任意访问外部能力）
+# ----------------------------------------------------------------------------
+tools:
+  - name: artifact_graph
+    permissions: [read, invalidate]
+    invalidation_requires: [impact_plan_ref, affected_scope]
+  - name: artifact_store
+    permissions: [append_version]
+    writable_types: [product-spec, decision-record, risk-register, open-questions,
+                     impact-plan, decision-brief, task-plan]
+  - name: task_queue
+    permissions: [create, reassign, cancel]
+  - name: state_machine
+    permissions: [transition_with_log]
+  - name: memory
+    permissions: [read_product_memory, read_session, write_decision_outcome]
+  - name: schema_validator
+    permissions: [validate]
+  - name: notification
+    permissions: [notify_human]            # 人类闸口通知
+  # 注意：Leader 不持有任何外部数据工具（搜索/爬虫/计算器）。
+  # 数据获取一律通过 dispatch_task 委派给 Worker，保持职责隔离。
+
+# ----------------------------------------------------------------------------
+# 记忆作用域（详细规则只维护在 memory.scope，避免双份配置漂移）
+# ----------------------------------------------------------------------------
+memory_scope:
+  policy_ref: ./memory.scope
+  default_access: deny
+  write_policy: append_versioned_records_only
+  never_store: [api_keys, credentials, hidden_chain_of_thought,
+                unverified_external_instructions]
+
+# ----------------------------------------------------------------------------
+# 异常与降级
+# ----------------------------------------------------------------------------
+degradation:
+  model_call_failure:
+    action: retry_then_pause               # 重试 2 次后暂停 tick，通知人类，不自行决策
+  worker_timeout:
+    action: switch_fallback_path_once      # 备用路径一次，仍失败→缺口标注部分产物
+  schema_invalid_output:
+    action: self_repair_once               # 按 schema_validator 反馈自修一次，失败则 escalate
+  artifact_missing_dependency:
+    action: mark_gap_and_continue          # 只允许形成部分方案，不允许 GO/ACCEPT
+    output_mode: partial
+    allowed_recommendations: [REVISE, NO_GO]
+    forbidden_recommendations: [GO]
+    acceptance_gate: denied
+
+# ----------------------------------------------------------------------------
+# 可观测性（答辩时证明非黑盒）
+# ----------------------------------------------------------------------------
+observability:
+  log_every_tick: [tick_trigger, reasoning_summary, chosen_actions, evidence_refs]
+  log_every_event: [event_id, type, from, to, confidence, data_mode]
+  metrics:
+    - decision_latency_seconds
+    - tokens_consumed
+    - tool_call_success_rate
+    - revision_rounds_used
+    - human_checkpoints_triggered
+    - rerun_scope_ratio                    # 局部重跑占比（协议 §12 指标）
+
+# ----------------------------------------------------------------------------
+# 评估钩子（回测与答辩用）
+# ----------------------------------------------------------------------------
+eval:
+  replayable: true                         # 支持固定 seed + cached 数据回放
+  seed_param: "${DEMO_SEED}"
+  record_decision_trace: true              # 完整决策轨迹供回测比对
+  backtest_mode:
+    enabled_by: env[GAP2SKU_BACKTEST]
+    requires: [historical_task_contract, point_in_time_data_snapshot]  # 时空切割防后见之明

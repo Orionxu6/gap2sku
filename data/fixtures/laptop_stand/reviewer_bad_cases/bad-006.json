@@ -1,0 +1,5 @@
+{
+  "case": "bad-006",
+  "rule": "R009",
+  "desc": "REJECT feature without rationale"
+}

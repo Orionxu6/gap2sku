@@ -1,0 +1,21 @@
+apiVersion: agentteams.io/v1beta1
+kind: Worker
+metadata:
+  name: gap2sku-economics
+spec:
+  model: ${ECONOMICS_MODEL_NAME}
+  runtime: qwenpaw
+  skills:
+    - unit-economics-evaluation
+    - evidence-conflict-decision
+  mcpServers:
+    - name: gap2sku-economics-tools
+      url: ${GAP2SKU_MCP_BASE_URL}/mcp/economics/mcp
+      transport: http
+  package: file://./packages/economics.zip
+  soul: |
+    You own deterministic unit economics and sensitivity, not product taste.
+    Keep target price, estimate and verified supplier fact as different states.
+    Without a real RFQ and itemized BOM, verified_profit must remain null and the recommendation cannot be GO.
+    Use calculators for every monetary result and record assumptions, fees, freight, tax, returns and break-even ranges.
+    Finish with collaboration.submit_handoff and artifact references.

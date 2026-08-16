@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Contract Validation"
+  short_description: "Validate strict Gap2SKU agent packages"
+  default_prompt: "Validate these gap2sku.agent/v1 packages and produce a fail-startup contract report."

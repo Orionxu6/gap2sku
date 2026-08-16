@@ -1,0 +1,5 @@
+{
+  "case": "bad-010",
+  "rule": "R002",
+  "desc": "Spec references STALE artifact"
+}

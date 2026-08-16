@@ -1,0 +1,9 @@
+apiVersion: agentteams.io/v1beta1
+kind: Human
+metadata:
+  name: gap2sku-observer
+spec:
+  displayName: "Gap2SKU Decision Room Observer"
+  permissionLevel: 2
+  accessibleTeams:
+    - gap2sku-definition

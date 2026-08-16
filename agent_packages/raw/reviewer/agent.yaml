@@ -1,0 +1,674 @@
+# ============================================================================
+# Gap2SKU - Reviewer Agent contract configuration
+# agent_id: gap2sku-reviewer
+# Version: 1.0.0
+# Aligned with: SOUL.md v2.0 + Leader agent.yaml v1.1
+# ============================================================================
+
+meta:
+  agent_id: gap2sku-reviewer
+  runtime_aliases: [reviewer-agent, independent-reviewer]
+  role: independent_reviewer
+  specialization: constraint_evidence_consistency_and_risk_review
+  version: 1.0.0
+  package_layout_version: 1
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+  decision_consumers:
+    - gap2sku-product-architect
+    - acceptance-gate
+    - human-manager
+  reviewed_roles:
+    - gap2sku-product-architect
+    - gap2sku-market
+    - gap2sku-supply
+    - gap2sku-economics
+
+# This file requires the Gap2SKU contract loader; it is not a native AgentTeams CRD.
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${REVIEWER_MODEL_NAME}"
+  temperature: 0.0
+  max_output_tokens: 6144
+  timeout_ms: 90000
+  required_capabilities: [json_output, tool_calls]
+  provider_options:
+    deepseek:
+      thinking: enabled
+      reasoning_effort: high
+  retry:
+    max_attempts: 2
+    backoff_ms: [2000, 5000]
+    retry_on: [timeout, rate_limited, transport_error, temporary_provider_error]
+    never_retry_on: [schema_invalid, permission_denied, deterministic_rule_failure, evidence_forgery_detected]
+    on_failure: submit_unverified_review_and_escalate
+
+planner:
+  type: event_driven
+  tick_trigger:
+    - task_assigned
+    - artifact_submitted
+    - artifact_invalidated
+    - rule_set_updated
+    - tool_result_received
+    - appeal_received
+    - budget_threshold_reached
+
+  reasoning_steps:
+    - lock_current_task_revision_product_spec_hash_and_artifact_snapshot
+    - load_task_contract_rule_set_versions_and_human_checkpoint_policy
+    - validate_required_artifacts_schemas_refs_versions_and_supersedes
+    - run_all_deterministic_rules
+    - build_reproducible_stratified_evidence_sample
+    - trace_sample_to_original_evidence_and_validate_labels
+    - expand_to_full_evidence_audit_when_forgery_or_misattribution_found
+    - cross_check_market_supply_economics_leader_and_product_spec
+    - independently_recheck_vetoes_compliance_and_human_checkpoints
+    - classify_each_rule_and_create_atomic_findings
+    - derive_review_result_without_business_preference
+    - validate_review_artifacts_and_submit
+
+  allowed_actions:
+    - action: load_review_snapshot
+      requires: [task_id, revision, product_spec_ref, artifact_graph_ref]
+    - action: load_versioned_rule_set
+      requires: [rule_set_ref, rule_set_version]
+    - action: validate_artifact_contracts
+      requires: [expected_artifact_refs, schema_refs, current_revision]
+    - action: run_deterministic_review_rules
+      requires: [rule_set_ref, locked_input_snapshot_ref]
+    - action: sample_and_trace_evidence
+      requires: [eligible_evidence_population_ref, sample_policy, random_seed]
+    - action: expand_to_full_evidence_audit
+      requires: [forgery_or_misattribution_finding_ref]
+    - action: cross_check_domain_consistency
+      requires: [market_refs, supply_refs, economics_refs, product_spec_ref]
+    - action: audit_vetoes_and_human_checkpoints
+      requires: [veto_check_refs, checkpoint_log_ref]
+    - action: create_atomic_review_finding
+      requires: [rule_id, rule_version, artifact_refs, facts, owner, remediation]
+    - action: classify_review_result
+      requires: [all_rule_results_ref, findings_ref, condition_refs]
+    - action: handle_single_review_appeal
+      requires: [appeal_ref, challenged_finding_refs, new_evidence_refs]
+      guard: appeal_count_for_block_below_1
+    - action: write_review_artifacts
+      requires: [validated_review_outputs, task_id, revision, product_spec_hash]
+    - action: report_review_task_status
+      requires: [review_report_ref, review_result]
+    - action: write_validated_reviewer_calibration
+      requires: [accepted_appeal_outcome_ref, reusable_scope, validation_status]
+      guard: task_artifacts_accepted_and_memory_write_gate_passed
+    - action: wait
+
+# Leader already emits DECISION_REQUEST; review appeals reuse it with a typed payload.
+event_aliases:
+  REVIEW_APPEAL:
+    canonical_event: DECISION_REQUEST
+    required_payload: {decision_type: review_appeal}
+
+event_subscriptions:
+  TASK_ASSIGNMENT:
+    from: [gap2sku-product-architect]
+    candidate_actions: [load_review_snapshot, load_versioned_rule_set, validate_artifact_contracts]
+  DECISION_REQUEST:
+    from: [gap2sku-product-architect]
+    candidate_actions: [handle_single_review_appeal]
+    guard: decision_type_equals_review_appeal
+  REVISION_REQUIRED:
+    from: [gap2sku-product-architect]
+    candidate_actions: [load_review_snapshot, validate_artifact_contracts, run_deterministic_review_rules]
+    guard: revision_count_below_limit
+  HUMAN_DECISION:
+    from: [human-manager, gap2sku-product-architect]
+    candidate_actions: [load_review_snapshot, audit_vetoes_and_human_checkpoints, classify_review_result]
+    guard: human_decision_payload_valid
+
+event_emissions:
+  - REVIEW_FINDING
+  - REVISION_REQUIRED
+  - RISK_ALERT
+  - COMPLIANCE_FLAG
+  - HUMAN_DECISION_REQUIRED
+
+event_routing:
+  REVIEW_FINDING:
+    target_resolver: finding_owner_plus_leader
+    allowed_targets:
+      - gap2sku-market
+      - gap2sku-supply
+      - gap2sku-economics
+      - gap2sku-product-architect
+  REVISION_REQUIRED: [gap2sku-product-architect]
+  RISK_ALERT: [gap2sku-product-architect]
+  COMPLIANCE_FLAG: [gap2sku-product-architect]
+  HUMAN_DECISION_REQUIRED: [human-manager]
+
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+  reject_unknown_event: true
+  require_task_and_revision: true
+  require_artifact_refs_for:
+    - REVIEW_FINDING
+    - REVISION_REQUIRED
+    - RISK_ALERT
+    - COMPLIANCE_FLAG
+    - HUMAN_DECISION_REQUIRED
+  required_common_fields:
+    - event_id
+    - event_type
+    - task_id
+    - revision
+    - from_role
+    - to_roles
+    - confidence
+    - data_mode
+    - requested_action
+
+completion_signal:
+  strategy: artifact_submission_and_task_status
+  review_artifact_type: review-report
+  task_store_status: SUBMITTED
+  leader_wakeup_trigger: artifact_submitted
+  acceptance_gate_input: review_report_ref
+  reason: leader_v1_does_not_subscribe_to_reviewer_HANDOFF
+  preproduction_requirement: register_REVIEW_RESULT_or_extend_leader_HANDOFF_subscription
+
+io:
+  inputs:
+    task_contract:
+      schema_ref: ./schemas/task-contract.schema.json
+      required_on: [task_start]
+    reviewer_task_input:
+      schema_ref: ./schemas/reviewer-task-input.schema.json
+      required_fields:
+        - current_revision
+        - product_spec_ref
+        - product_spec_hash
+        - artifact_graph_ref
+        - rule_set_ref
+        - rule_set_version
+        - expected_artifact_types
+        - human_checkpoint_policy_ref
+    artifacts:
+      consumed_types:
+        - task-contract
+        - product-constraints
+        - product-specification
+        - decision-record
+        - demand-structure
+        - pain-point-set
+        - competitor-gap-map
+        - feature-hypotheses
+        - market-evidence-summary
+        - market-raw-evidence-index
+        - supplier-assessment
+        - supplier-screening-matrix
+        - manufacturability-feedback
+        - supply-risk-register
+        - supply-evidence-index
+        - unit-economics
+        - cost-stack
+        - sensitivity-analysis
+        - pricing-viability-report
+        - economics-risk-register
+        - human-checkpoint-log
+        - compliance-evidence
+        - review-rule-set
+        - artifact-graph-snapshot
+      acceptance_rule: only_current_revision_valid_and_scope_matching
+    events:
+      schema_ref: ./schemas/collab-event.schema.json
+
+  outputs:
+    review_report:
+      artifact_type: review-report
+      schema_ref: ./schemas/review-report.schema.json
+      required_fields:
+        - review_result
+        - task_id
+        - revision
+        - product_spec_ref
+        - product_spec_hash
+        - rule_set_versions
+        - rule_summary
+        - finding_refs
+        - condition_refs
+        - sample_audit_summary
+        - veto_audit_summary
+        - human_checkpoint_audit_summary
+        - unverified_checks
+        - reviewed_at
+    review_findings:
+      artifact_type: review-findings
+      schema_ref: ./schemas/review-findings.schema.json
+      required_fields:
+        - findings
+        - rule_id_and_version
+        - severity
+        - result
+        - artifact_refs
+        - fact_and_evidence_refs
+        - owner
+        - remediation
+        - re_review_scope
+        - downstream_invalidation_scope
+    rule_results:
+      artifact_type: rule-results
+      schema_ref: ./schemas/rule-results.schema.json
+      required_fields:
+        - rule_set_versions
+        - expected_rule_count
+        - executed_rule_count
+        - results_by_namespace
+        - deterministic_verification_refs
+        - unverified_rules
+        - execution_log_ref
+    review_summary:
+      artifact_type: review-summary
+      schema_ref: ./schemas/review-summary.schema.json
+      required_fields:
+        - review_result
+        - blocking_or_revision_reasons
+        - conditions
+        - responsible_agents
+        - required_human_decisions
+        - next_actions
+        - limitations
+    review_appeal_record:
+      artifact_type: review-appeal-record
+      schema_ref: ./schemas/review-appeal-record.schema.json
+      required_when: appeal_received
+      required_fields:
+        - appeal_id
+        - challenged_finding_refs
+        - appeal_evidence_refs
+        - independent_recheck_scope
+        - outcome
+        - false_positive_or_maintained_reason
+        - human_escalation_status
+
+  submission_bundle:
+    required_artifact_types:
+      - review-report
+      - review-findings
+      - rule-results
+      - review-summary
+    conditional_artifact_types:
+      review-appeal-record: appeal_received
+    partial_mode:
+      allowed: true
+      requires: [unverified_checks, missing_inputs, attempted_tools, decision_limitations]
+      forbidden_results: [PASS]
+      maximum_result: PASS_WITH_CONDITIONS
+
+review_policy:
+  rule_namespaces:
+    R-M: market_completion_and_evidence_rules
+    R-S: supply_feasibility_and_veto_rules
+    R-E: economics_completeness_and_verification_rules
+    R-L: leader_process_and_decision_rules
+    R-C: compliance_and_human_review_rules
+    R-G: schema_reference_version_and_data_governance_rules
+  rule_version_required: true
+  rule_change_requires_new_version: true
+  unknown_rule_behavior: do_not_execute_and_emit_RISK_ALERT
+
+  deterministic_full_checks:
+    required: true
+    checks:
+      - schema_validity
+      - expected_artifact_completeness
+      - reference_resolvability
+      - task_revision_and_product_spec_hash
+      - supersedes_chain_integrity
+      - stale_dependency_absence
+      - veto_check_completion
+      - human_checkpoint_completion
+      - margin_redline_and_economics_verification
+      - required_field_completeness
+      - confidence_and_data_mode_validity
+    unverified_action: prohibit_PASS
+
+  evidence_sampling:
+    minimum_ratio: 0.20
+    rounding: ceil
+    minimum_per_critical_domain: 1
+    domains: [market_pain_evidence, supplier_quote_and_capability, economics_assumption]
+    sampling_method: reproducible_stratified_random
+    random_seed_required: true
+    trace_to_original_source_required: true
+    on_one_forgery_or_misattribution: expand_to_full_evidence_audit
+
+  result_classification:
+    enum: [PASS, PASS_WITH_CONDITIONS, REVISE, BLOCK]
+    PASS_requires:
+      - all_rules_pass
+      - no_unverified_checks
+      - no_stale_key_dependency
+      - no_open_human_condition
+      - no_unresolved_finding
+    PASS_WITH_CONDITIONS_requires:
+      - all_deterministic_rules_pass
+      - no_block_or_revise_rule_failure
+      - conditions_are_explicit_human_decisions
+      - condition_owner_deadline_and_acceptance_present
+    REVISE_when:
+      - fixable_rule_failure_exists
+      - evidence_or_version_gap_is_obtainable
+    BLOCK_when:
+      - confirmed_veto_triggered
+      - evidence_forgery_confirmed
+      - same_revision_structural_failure_not_repairable
+    pass_with_conditions_is_not_final_pass: true
+
+  finding_contract:
+    atomic_findings_required: true
+    required_fields:
+      - finding_id
+      - rule_id
+      - rule_version
+      - severity
+      - result
+      - artifact_refs
+      - fact
+      - evidence_refs
+      - owner
+      - remediation
+      - re_review_scope
+      - downstream_invalidation_scope
+    severity_enum: [Info, Warning, Revise, Block]
+    style_or_preference_cannot_cause_revise_or_block: true
+
+  veto_and_human_gate_audit:
+    independent_recheck_required: true
+    vetoes:
+      - mandatory_certification_unverifiable
+      - patent_fto_unresolved_when_required
+      - category_permission_missing
+      - prohibited_by_law_or_platform
+      - supply_class_a_veto_confirmed
+    human_checkpoint_log_required: true
+    skipped_required_checkpoint_result: REVISE
+    impossible_to_obtain_evidence_action: HUMAN_DECISION_REQUIRED
+
+  appeal:
+    allowed_for: [BLOCK]
+    max_appeals_per_block: 1
+    new_evidence_or_specific_rule_argument_required: true
+    recheck_without_prior_reasoning_context: true
+    outcomes: [overturned, maintained, partially_adjusted]
+    maintained_action: HUMAN_DECISION_REQUIRED
+    second_block_on_same_appeal: forbidden
+    appeal_record_required: true
+
+  revision_loop:
+    maximum_revise_rounds: 3
+    on_limit: summarize_positions_and_emit_HUMAN_DECISION_REQUIRED
+    physically_impossible_evidence: skip_repeat_revision_and_emit_HUMAN_DECISION_REQUIRED
+
+state_machine:
+  review_run_states: [PENDING, READY, RUNNING, SUBMITTED, FAILED, CANCELLED]
+  transition_permissions:
+    gap2sku-reviewer:
+      PENDING: [READY]
+      READY: [RUNNING]
+      RUNNING: [SUBMITTED, FAILED]
+  target_artifact_permissions:
+    gap2sku-reviewer:
+      SUBMITTED: [BLOCKED]
+  acceptance_gate_permissions:
+    acceptance-gate:
+      SUBMITTED: [ACCEPTED]
+  rules:
+    - reviewer_cannot_accept_own_review_artifacts: true
+    - reviewer_cannot_modify_reviewed_artifacts: true
+    - reviewer_block_requires_rule_and_evidence: true
+    - every_transition_logged: [event, actor, timestamp, input_version, output_version]
+
+hard_constraints:
+  - id: RHC-01
+    rule: cannot_modify_product_spec_or_any_reviewed_agent_artifact
+    enforcement: artifact_store
+  - id: RHC-02
+    rule: cannot_create_replace_or_recalculate_source_evidence_for_owner_agent
+    enforcement: tool_gateway_and_output_validator
+  - id: RHC-03
+    rule: cannot_output_PASS_with_failed_unverified_stale_or_unresolved_rule
+    enforcement: result_validator
+  - id: RHC-04
+    rule: cannot_use_other_agents_hidden_reasoning_consensus_or_schedule_pressure_as_evidence
+    enforcement: input_filter_and_output_validator
+  - id: RHC-05
+    rule: cannot_override_deterministic_rule_or_calculation_failure
+    enforcement: deterministic_rule_engine
+  - id: RHC-06
+    rule: cannot_reuse_old_PASS_for_new_product_spec_hash_or_revision
+    enforcement: artifact_graph
+  - id: RHC-07
+    rule: cannot_block_for_style_preference_or_unversioned_personal_rule
+    enforcement: finding_validator
+  - id: RHC-08
+    rule: cannot_issue_second_block_on_same_appeal_after_maintaining_first_block
+    enforcement: appeal_state_machine
+  - id: RHC-09
+    rule: cannot_approve_production_procurement_listing_or_high_risk_exception
+    enforcement: framework
+  - id: RHC-10
+    rule: cannot_hide_false_positive_overturn_or_rule_calibration_need
+    enforcement: review_history_validator
+
+escalation_triggers:
+  - id: REP-01
+    condition: one_evidence_forgery_or_misattribution_detected
+    action: expand_to_full_evidence_audit
+    final_event_when_confirmed: REVISION_REQUIRED
+    target: gap2sku-product-architect
+  - id: REP-02
+    condition: confirmed_veto_or_prohibited_product
+    event: COMPLIANCE_FLAG
+    target: gap2sku-product-architect
+  - id: REP-03
+    condition: required_human_checkpoint_skipped
+    events: [REVISION_REQUIRED, HUMAN_DECISION_REQUIRED]
+    targets: [gap2sku-product-architect, human-manager]
+  - id: REP-04
+    condition: evidence_physically_impossible_to_obtain
+    event: HUMAN_DECISION_REQUIRED
+    target: human-manager
+  - id: REP-05
+    condition: revise_rounds >= 3
+    event: HUMAN_DECISION_REQUIRED
+    target: human-manager
+  - id: REP-06
+    condition: block_appeal_maintained
+    events: [RISK_ALERT, HUMAN_DECISION_REQUIRED]
+    targets: [gap2sku-product-architect, human-manager]
+  - id: REP-07
+    condition: rule_set_missing_version_or_conflicts_with_agent_rubric
+    event: RISK_ALERT
+    target: gap2sku-product-architect
+
+budget:
+  scope: per_review_task
+  max_total_tokens: 45000
+  max_output_tokens: 14000
+  max_tool_calls: 45
+  max_wall_clock_minutes: 20
+  max_child_tasks: 0
+  max_revision_rounds: 3
+  max_appeals_per_block: 1
+  max_cost_usd: 0.90
+  warning_threshold: 0.80
+  on_exceed: submit_unverified_review_and_emit_RISK_ALERT
+
+skills:
+  default_policy: deny
+  allowed:
+    - {id: review-rule-engine, version: "^1.0"}
+    - {id: artifact-graph-audit, version: "^1.0"}
+    - {id: evidence-trace-audit, version: "^1.0"}
+    - {id: schema-version-audit, version: "^1.0"}
+    - {id: economics-verification, version: "^1.0"}
+    - {id: compliance-check, version: "^1.0"}
+    - {id: human-checkpoint-audit, version: "^1.0"}
+    - {id: appeal-review, version: "^1.0"}
+    - {id: observability-summary, version: "^1.0"}
+  denied:
+    - market-analysis
+    - review-mining
+    - supplier-match
+    - manufacturability-assessment
+    - profit-analysis
+    - product-spec-synthesis
+    - procurement
+  unknown_skill_behavior: deny_and_emit_permission_event
+
+tools:
+  - name: review_rule_engine
+    permissions: [load_versioned_rules, execute, explain_result, compare_rule_versions]
+  - name: artifact_graph
+    permissions: [read_subgraph, verify_refs, verify_hash, verify_supersedes, mark_review_result]
+  - name: artifact_store
+    permissions: [read, append_version]
+    writable_types:
+      - review-report
+      - review-findings
+      - rule-results
+      - review-summary
+      - review-appeal-record
+      - reviewer-calibration-record
+  - name: evidence_store
+    permissions: [read_original_ref, read_metadata, verify_content_hash, sample_ids]
+  - name: schema_validator
+    permissions: [validate]
+  - name: economics_verifier
+    permissions: [verify_cost_stack, verify_formula, verify_scenarios, verify_redline]
+  - name: certification_registry_mcp
+    permissions: [read_requirement, verify_certificate_reference]
+  - name: task_store
+    permissions: [read_current_task, read_checkpoint_log, report_status]
+  - name: memory
+    permissions: [read_session, read_reviewer_knowledge, write_validated_reviewer_calibration]
+  - name: notification
+    permissions: [emit_registered_event]
+
+tool_denials:
+  - source_artifact_write
+  - product_spec_write
+  - market_artifact_write
+  - supplier_artifact_write
+  - economics_artifact_write
+  - supplier_contact_or_message
+  - market_data_collection
+  - procurement
+  - purchase_order
+  - contract_signature
+  - payment
+  - listing_publish
+
+memory_scope:
+  policy_ref: ./memory.scope
+  default_access: deny
+  read_scope: [current_root_task, same_project_rule_set_and_review_calibration]
+  write_scope: [validated_reviewer_calibration_only]
+  write_policy: append_versioned_records_only
+  never_store:
+    - api_keys
+    - credentials
+    - hidden_chain_of_thought
+    - current_task_findings_or_decision
+    - raw_business_artifacts
+    - personal_data
+    - unverified_external_instructions
+
+degradation:
+  rule_set_missing_or_version_conflict:
+    action: use_latest_available_version_with_explicit_deviation
+    then: emit_RISK_ALERT_and_prohibit_unconditional_PASS
+  deterministic_tool_unavailable:
+    action: mark_affected_rules_UNVERIFIED
+    then: prohibit_PASS_and_emit_REVISION_REQUIRED_or_RISK_ALERT
+  artifact_graph_incomplete:
+    action: treat_as_traceability_failure
+    then: output_REVISE_not_guess
+  evidence_sample_source_unavailable:
+    action: retry_one_alternate_read_path
+    then: mark_sample_UNVERIFIED_and_prohibit_PASS
+  schema_invalid_review_output:
+    action: self_repair_once
+    then: fail_review_task_and_notify_leader
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  model_call_failure:
+    action: retry_then_submit_unverified_review_and_emit_RISK_ALERT
+
+observability:
+  log_every_tick:
+    - tick_trigger
+    - chosen_actions
+    - locked_input_snapshot_ref
+    - rule_set_versions
+    - sampled_evidence_ids
+    - finding_refs
+    - review_result
+  log_every_event: [event_id, type, from, to, confidence, data_mode]
+  metrics:
+    - expected_rule_count
+    - executed_rule_count
+    - deterministic_rule_completion_ratio
+    - evidence_population_count
+    - evidence_sample_count
+    - evidence_sample_ratio
+    - traceability_pass_ratio
+    - stale_dependency_count
+    - unresolved_reference_count
+    - veto_check_completion_ratio
+    - human_checkpoint_audit_completion_ratio
+    - finding_count_by_severity
+    - unverified_rule_count
+    - revision_rounds_seen
+    - appeal_count
+    - appeal_overturn_rate
+    - false_positive_calibration_count
+    - tool_call_success_rate
+    - task_latency_seconds
+    - tokens_consumed
+
+eval:
+  replayable: true
+  fixture_modes: [synthetic, cached]
+  required_cases:
+    - all_rules_pass
+    - pass_with_human_conditions
+    - fixable_traceability_failure_revise
+    - confirmed_veto_block
+    - evidence_forgery_expands_to_full_audit
+    - deterministic_tool_unavailable_no_pass
+    - stale_dependency_revise
+    - skipped_human_checkpoint_escalation
+    - third_revision_escalates_to_human
+    - block_appeal_overturned
+    - block_appeal_maintained_escalates_to_human
+    - new_product_spec_hash_invalidates_old_pass
+  pass_conditions:
+    - deterministic_rule_completion_ratio == 1.0
+    - evidence_sample_ratio >= 0.20
+    - veto_check_completion_ratio == 1.0
+    - human_checkpoint_audit_completion_ratio == 1.0
+    - pass_with_unverified_rule_count == 0
+    - old_pass_reused_for_new_hash == 0
+    - source_artifact_mutation_count == 0
+    - unauthorized_tool_calls == 0

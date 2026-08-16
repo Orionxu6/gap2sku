@@ -1,0 +1,15 @@
+{
+  "assumption_version": "1.0.0",
+  "currency": "USD",
+  "platform_fee_rate": "0.15",
+  "platform_fixed_fee": "0.00",
+  "fulfillment_fee": "3.50",
+  "marketing_rate": "0.08",
+  "loss_allowance_rate": "0.03",
+  "packaging_cost": "0.80",
+  "shipping_cost": "2.20",
+  "rounding": {
+    "decimals": 2,
+    "mode": "ROUND_HALF_UP"
+  }
+}

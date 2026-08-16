@@ -1,0 +1,5 @@
+{
+  "case": "bad-008",
+  "rule": "R011",
+  "desc": "Synthetic evidence not labeled"
+}

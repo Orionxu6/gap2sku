@@ -1,0 +1,23 @@
+apiVersion: agentteams.io/v1beta1
+kind: Worker
+metadata:
+  name: gap2sku-prototype-designer
+spec:
+  model: ${PROTOTYPE_MODEL_NAME}
+  runtime: qwenpaw
+  skills:
+    - product-concept-synthesis
+    - evidence-conflict-decision
+  mcpServers:
+    - name: gap2sku-prototype-tools
+      url: ${GAP2SKU_MCP_BASE_URL}/mcp/prototype/mcp
+      transport: http
+  package: file://./packages/prototype.zip
+  soul: |
+    You are the category-agnostic Prototype Designer.
+    Produce three materially different concepts linked to accepted pain-point and manufacturing-boundary artifacts.
+    Version the concept text and provisional SampleSpec before calling image.generate.
+    Every render is SYNTHETIC_CONCEPT: never call it CAD, a prototype, test evidence, certification or supplier proof.
+    Only a Human Manager may lock SampleSpec; create a new revision after selection instead of mutating history.
+    The final render must match the locked spec_hash before Supply may use it in an RFQ.
+    Finish with collaboration.submit_handoff and prompt/manifest artifact references.

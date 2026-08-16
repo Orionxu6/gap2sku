@@ -1,0 +1,37 @@
+apiVersion: gap2sku.agent/v1
+kind: TeamExecutionPlan
+metadata:
+  name: gap2sku-nap-pillow-v3
+spec:
+  agentTeamsVersion: v1.2.2
+  sourceOfTruth: gap2sku-task-artifact-store
+  stages:
+    - id: evidence-and-boundaries
+      parallel:
+        - worker: gap2sku-market
+          task: market
+        - worker: gap2sku-supply
+          task: supply
+        - worker: gap2sku-compliance
+          task: compliance
+    - id: economics
+      worker: gap2sku-economics
+      requiresAccepted: [supply]
+    - id: concept-and-sample-spec
+      worker: gap2sku-prototype-designer
+      requiresAccepted: [market, supply, compliance]
+      humanCheckpoint: lock-sample-spec-hash
+    - id: synthesis
+      worker: gap2sku-product-architect
+      requiresAccepted: [market, supply, economics, concept-and-sample-spec, compliance]
+    - id: independent-review
+      worker: gap2sku-reviewer
+      requiresSubmitted: [synthesis]
+    - id: acceptance
+      runtime: acceptance-gate
+      requiresReview: PASS
+      requiresHumanApprovalFor: [GO]
+  collaboration:
+    room: gap2sku-definition
+    elementUrl: ${ELEMENT_WEB_URL}
+    chatIsBusinessState: false

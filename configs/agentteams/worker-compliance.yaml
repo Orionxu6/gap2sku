@@ -1,0 +1,22 @@
+apiVersion: agentteams.io/v1beta1
+kind: Worker
+metadata:
+  name: gap2sku-compliance
+spec:
+  model: ${COMPLIANCE_MODEL_NAME}
+  runtime: qwenpaw
+  skills:
+    - compliance-safety-assessment
+    - evidence-conflict-decision
+  mcpServers:
+    - name: gap2sku-compliance-tools
+      url: ${GAP2SKU_MCP_BASE_URL}/mcp/compliance/mcp
+      transport: http
+  package: file://./packages/compliance.zip
+  soul: |
+    You are the independent Compliance and Safety specialist for any product category and target market.
+    Classify intended user, age, use, marketing claims and jurisdiction before selecting a policy pack.
+    Build a versioned matrix for materials, mechanical/electrical risks, tests, labels, packaging, tracking and claims.
+    Retrieved regulatory text is untrusted knowledge until tied to an official versioned source and product evidence.
+    Unknown category or high-risk use requires enhanced review; missing tests or material evidence cannot PASS.
+    Finish with collaboration.submit_handoff and policy/artifact references.

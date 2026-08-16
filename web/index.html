@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Gap2SKU · AgentTeam 决策控制台</title>
+  <link rel="stylesheet" href="/static/style.css?v=3.0.2">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Gap2SKU 首页">
+      <span class="brand-mark" aria-hidden="true">G</span>
+      <span>Gap2SKU</span>
+      <i></i>
+      <strong>AgentTeam 决策控制台</strong>
+    </a>
+    <button class="project-switcher" id="project-switcher" type="button">
+      <span><small>当前项目</small><b id="project-name">读取中…</b></span>
+      <span class="run-progress" id="run-progress"><i></i><b>连接中</b><small>0/7</small></span>
+      <span class="chevron">⌄</span>
+    </button>
+    <div class="top-actions">
+      <span class="top-badge policy" id="policy-badge">POLICY —</span>
+      <button class="top-badge live" id="live-toggle" type="button"><i></i><span>LIVE</span></button>
+      <span class="top-badge mode" id="data-mode">—</span>
+      <a class="story-link" href="/story">产品方案</a>
+      <a class="guide-link" href="/guide">使用指南</a>
+      <a class="log-link" href="http://127.0.0.1:18088/" target="_blank" rel="noreferrer">底层日志</a>
+    </div>
+  </header>
+
+  <section class="constraint-strip" aria-label="项目约束">
+    <div><small>目标售价</small><strong id="constraint-price">¥99–119</strong></div>
+    <i></i>
+    <div><small>成本状态</small><strong class="unknown" id="constraint-cost">待 RFQ</strong></div>
+    <i></i>
+    <div><small>目标毛利</small><strong id="constraint-margin">≥40%</strong></div>
+    <i></i>
+    <div><small>当前结论</small><strong class="recommendation-inline" id="recommendation-inline">—</strong></div>
+  </section>
+
+  <main class="decision-layout">
+    <section class="collaboration-panel panel">
+      <div class="panel-head collaboration-head">
+        <div>
+          <p class="eyebrow">STRUCTURED COLLABORATION</p>
+          <h1>AgentTeam 协作室</h1>
+        </div>
+        <div class="head-actions">
+          <button class="quiet-button" id="replay-button" type="button">历史回放</button>
+          <button class="icon-button" id="raw-drawer-button" type="button" aria-label="查看原始消息">{ }</button>
+        </div>
+      </div>
+
+      <div class="agent-roster" id="agent-roster" aria-label="七名 Worker 与 Human Manager 状态"></div>
+
+      <div class="stream-toolbar">
+        <div class="filter-pills" id="filter-pills">
+          <button class="active" data-filter="run" type="button">本轮</button>
+          <button data-filter="decision" type="button">决策</button>
+          <button data-filter="risk" type="button">风险</button>
+          <button data-filter="artifact" type="button">Artifact</button>
+        </div>
+        <span id="stream-status"><i></i> SSE 已连接</span>
+      </div>
+
+      <div class="replay-bar" id="replay-bar" hidden>
+        <button id="replay-exit" type="button">返回 LIVE</button>
+        <input id="replay-range" type="range" min="1" max="1" value="1" aria-label="历史事件位置">
+        <span id="replay-label">1 / 1</span>
+      </div>
+
+      <div class="message-stream" id="message-stream" aria-live="polite">
+        <div class="loading-state"><i></i><span>正在读取 AgentTeams 协作事件…</span></div>
+      </div>
+
+      <div class="composer-shell">
+        <div class="composer-notice"><span>i</span> 消息只创建建议任务，不会直接修改业务状态</div>
+        <form class="composer" id="message-form">
+          <textarea id="message-input" rows="1" maxlength="1200" placeholder="输入消息，使用 @Leader / @Market / @Supply…"></textarea>
+          <button type="submit" aria-label="发送消息">发送</button>
+        </form>
+        <div class="mention-menu" id="mention-menu" hidden></div>
+      </div>
+    </section>
+
+    <aside class="decision-panel panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">DECISION FIREWALL</p>
+          <h2>当前冲突</h2>
+        </div>
+        <button class="quiet-button" id="conflict-count" type="button">0 项</button>
+      </div>
+
+      <p class="conflict-summary" id="conflict-summary">正在读取冲突链…</p>
+      <div class="conflict-list" id="conflict-list"></div>
+
+      <section class="decision-section">
+        <div class="section-title-row">
+          <h2>建议决策</h2>
+          <span id="review-state" class="review-chip">REVIEW —</span>
+        </div>
+        <div class="decision-selector" id="decision-selector">
+          <div data-value="GO"><i></i>GO</div>
+          <div data-value="REVISE"><i></i>REVISE</div>
+          <div data-value="NO-GO"><i></i>NO-GO</div>
+        </div>
+        <div class="decision-reason" id="decision-reason"></div>
+        <button class="primary-button" id="approval-button" type="button">提交人工审批</button>
+        <div class="approval-result" id="approval-result" role="status"></div>
+      </section>
+
+      <section class="audit-links">
+        <button id="artifact-browser" type="button">查看 Artifact <span>›</span></button>
+        <button id="audit-button" type="button">审计记录 <span>›</span></button>
+      </section>
+    </aside>
+  </main>
+
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="详情抽屉">
+    <div class="drawer-head">
+      <div><p class="eyebrow" id="drawer-eyebrow">DETAIL</p><h2 id="drawer-title">详情</h2></div>
+      <button id="drawer-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <script src="/static/vendor/motion.js?v=3.0.1"></script>
+  <script src="/static/vendor/motion-fallback.js?v=3.0.1"></script>
+  <script src="/static/app.js?v=3.0.2"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+.env*
+.venv/
+.runtime/
+.git/
+.gitignore
+private/
+work/
+outputs/
+dist/
+tests/
+__pycache__/
+*.pyc
+*.pyo
+*.db-wal
+*.db-shm

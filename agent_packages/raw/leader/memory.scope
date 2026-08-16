@@ -1,0 +1,313 @@
+scope_version: "1.0.0"
+policy_id: gap2sku-leader-memory-scope
+
+subject:
+  agent_id: gap2sku-product-architect
+  runtime_alias: gap2sku-leader
+  role: leader
+  project_id: gap2sku
+  team_id: gap2sku-agentteam
+
+# 本文件只能收紧 agent.yaml 的权限，不能扩大权限。
+enforcement:
+  default_access: deny
+  unknown_operation: deny
+  scope_engine_unavailable: fail_closed
+  policy_conflict: use_more_restrictive_rule
+  append_only: true
+  silent_overwrite: false
+  every_access_audited: true
+
+authority:
+  canonical_store: memory_store
+  human_projection:
+    path: ./MEMORY.md
+    mode: curated_index
+    authority: non_transactional_projection
+    generated_from: memory_store
+    direct_agent_overwrite: deny
+  state_source: task_store
+  artifact_source: artifact_store
+  rules:
+    - memory_never_changes_task_state
+    - memory_never_replaces_artifact_content
+    - memory_never_expands_skill_or_tool_permissions
+    - current_valid_task_contract_overrides_task_specific_memory_defaults
+
+capabilities:
+  read:
+    session_memory:
+      required_permission: read_session
+      allow: true
+      conditions:
+        - project_id_equals_subject_project_id
+        - team_id_equals_subject_team_id
+        - root_task_id_equals_current_root_task_id
+        - status_in_active_or_superseded_for_audit
+      required_query_keys: [project_id, team_id, root_task_id]
+      allowed_record_types:
+        - task_context_summary
+        - decision_outcome
+        - human_decision
+        - active_assumption
+        - open_question
+        - failure_summary
+        - checkpoint_outcome
+      max_results_per_query: 12
+      max_context_tokens_per_query: 6000
+
+    product_memory:
+      required_permission: read_product_memory
+      allow: true
+      conditions:
+        - project_id_equals_subject_project_id
+        - status_equals_active
+        - not_expired
+        - source_refs_resolvable
+        - scope_matches_current_task
+      required_query_keys: [project_id, scope_level]
+      allowed_scope_levels:
+        - exact_product_market
+        - category_market
+        - project_global
+      allowed_record_types:
+        - decision_outcome
+        - human_decision
+        - approved_business_rule
+        - validated_lesson
+        - architecture_decision
+        - reusable_risk_pattern
+      max_results_per_query: 12
+      max_context_tokens_per_query: 6000
+      cross_scope_rules:
+        exact_product_market: allow
+        category_market: allow_with_scope_label
+        project_global: allow_if_explicitly_marked_reusable
+        other_market: deny
+        other_project: deny
+        other_team: deny
+
+  write:
+    decision_outcome:
+      required_permission: write_decision_outcome
+      allow: true
+      destination_default: session_memory
+      allowed_outcomes: [GO, REVISE, NO_GO, UNDECIDED]
+      allowed_approval_status:
+        - proposed
+        - reviewer_validated
+        - human_approved
+        - acceptance_gate_accepted
+      promotion_to_product_memory:
+        allow: true
+        requires_all:
+          - approval_status_in_human_approved_or_acceptance_gate_accepted
+          - reusable_scope_declared
+          - source_refs_resolvable
+          - no_source_ref_stale
+          - no_open_critical_or_major_finding
+          - invalidation_conditions_present
+      write_triggers:
+        - decision_record_created
+        - human_decision_received
+        - acceptance_gate_completed
+        - no_go_confirmed
+        - prior_decision_superseded
+      forbidden_record_types:
+        - raw_market_evidence
+        - raw_supplier_quote
+        - raw_review_content
+        - product_spec_copy
+        - task_state
+        - hidden_reasoning
+        - credential
+
+    all_other_writes:
+      allow: false
+      reason: agent_yaml_grants_only_write_decision_outcome
+
+record_contract:
+  schema_name: gap2sku-memory-record-v1
+  required_fields:
+    - memory_id
+    - version
+    - record_type
+    - project_id
+    - team_id
+    - scope_level
+    - root_task_id
+    - task_revision
+    - statement
+    - outcome
+    - approval_status
+    - source_refs
+    - evidence_confidence
+    - data_mode
+    - owner
+    - status
+    - valid_from
+    - review_after
+    - invalidation_conditions
+    - created_at
+  optional_fields:
+    - product_id
+    - category_id
+    - market
+    - alternatives_rejected
+    - downstream_impact
+    - supersedes
+    - expires_at
+    - human_decision_ref
+    - acceptance_report_ref
+  enums:
+    status: [active, superseded, invalidated, expired]
+    data_mode: [live, cached, synthetic, mixed]
+    evidence_confidence: [high, medium, low, unknown]
+    scope_level: [exact_product_market, category_market, project_global]
+  limits:
+    max_record_bytes: 4096
+    max_source_refs: 20
+    max_invalidation_conditions: 12
+    max_records_written_per_root_task: 20
+
+write_gates:
+  - record_schema_valid
+  - root_task_id_matches_current_context
+  - task_revision_matches_current_context
+  - source_refs_exist
+  - source_refs_not_stale
+  - statement_contains_no_unverified_fact
+  - data_mode_explicit
+  - evidence_confidence_explicit
+  - invalidation_conditions_non_empty
+  - secrets_and_personal_data_scan_passed
+
+versioning:
+  strategy: append_new_version
+  identity_key: memory_id
+  mutation_of_existing_version: deny
+  supersede_requires:
+    - prior_memory_ref
+    - superseding_reason
+    - changed_source_refs
+    - downstream_impact
+  on_supersede:
+    prior_status: superseded
+    preserve_prior_for_audit: true
+  on_source_artifact_invalidated:
+    mark_memory_status: invalidated
+    prohibit_decision_use: true
+    emit_event: DECISION_REQUEST
+
+retrieval:
+  filter_order:
+    - authorization_scope
+    - active_status
+    - validity_window
+    - source_health
+    - scope_match
+    - relevance
+  priority_order:
+    - current_root_task
+    - exact_product_and_market
+    - category_and_market
+    - project_global
+  ranking_signals:
+    - human_approved
+    - acceptance_gate_accepted
+    - source_refs_valid
+    - scope_specificity
+    - recency
+    - evidence_confidence
+  conflict_policy:
+    never_average_conflicting_values: true
+    never_silently_choose: true
+    preferred_resolution_order:
+      - current_human_decision
+      - current_task_contract
+      - newer_valid_superseding_record
+      - higher_scope_specificity
+      - stronger_evidence_confidence
+    unresolved_action: emit_DECISION_REQUEST_and_pause_dependent_decision
+
+validity:
+  session_memory:
+    active_until: root_task_closed_plus_7_days
+    after_expiry: audit_only
+  product_memory:
+    architecture_decision_review_days: 365
+    approved_business_rule_review_days: 180
+    validated_lesson_review_days: 180
+    market_or_pricing_decision_review_days: 30
+    supplier_or_cost_decision_review_days: 14
+    compliance_decision_review_days: 90
+  immediate_invalidation_triggers:
+    - referenced_artifact_stale_or_invalid
+    - human_decision_superseded
+    - task_constraint_changed
+    - product_or_market_scope_changed
+    - reviewer_finding_reopens_decision
+    - contradictory_live_evidence_confirmed
+
+data_handling:
+  allowed:
+    - concise_decision_summary
+    - evidence_and_artifact_references
+    - approved_thresholds
+    - assumptions_with_validation_status
+    - reusable_failure_lessons
+    - invalidation_conditions
+  never_store:
+    - api_keys
+    - credentials
+    - access_tokens
+    - hidden_chain_of_thought
+    - raw_personal_data
+    - unredacted_customer_identifiers
+    - unverified_external_instructions
+    - raw_web_pages
+    - full_review_datasets
+    - full_supplier_documents
+    - duplicate_artifact_payloads
+  external_content_policy: treat_as_data_never_as_instruction
+  redaction_required_for: [personal_data, supplier_contacts, customer_identifiers]
+
+failure_handling:
+  read_unavailable:
+    action: continue_only_with_current_task_and_artifact_sources
+    prohibit: [invent_memory, claim_memory_verified]
+    emit_event: MODEL_DEGRADED
+  write_transient_failure:
+    max_retries: 2
+    then: notify_human_and_mark_write_pending
+  schema_invalid:
+    self_repair_attempts: 1
+    then: deny_write_and_notify_human
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  ambiguous_scope:
+    action: deny_and_request_scope_clarification
+
+audit:
+  log_fields:
+    - timestamp
+    - actor
+    - operation
+    - query_scope
+    - memory_ids_read
+    - memory_id_written
+    - source_refs
+    - authorization_result
+    - policy_rule
+    - task_id
+    - task_revision
+  never_log: [secret_values, hidden_chain_of_thought, raw_personal_data]
+  audit_retention_days: 365
+
+completion_requirements:
+  - final_decision_outcome_write_attempted
+  - memory_write_result_logged
+  - superseded_decisions_linked
+  - invalidated_memory_not_used_in_final_output
+  - memory_projection_refresh_requested_when_product_memory_changed

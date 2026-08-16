@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evidence Conflict Decision"
+  short_description: "Turn evidence into governed decisions"
+  default_prompt: "Build evidence, conflict, option, review, and decision artifacts without promoting unverified facts."

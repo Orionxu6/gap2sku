@@ -1,0 +1,5 @@
+{
+  "case": "bad-001",
+  "rule": "R003",
+  "desc": "Hard constraint violated: factory_cost 9.00 > 8.00"
+}

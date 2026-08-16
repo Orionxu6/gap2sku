@@ -1,0 +1,26 @@
+{
+  "fixture_version": "1.0.0",
+  "generated_at_seed": 42,
+  "category": "laptop_stand",
+  "target_market": "US Amazon",
+  "is_synthetic": true,
+  "counts": {
+    "reviews": 500,
+    "competitors": 10,
+    "supplier_offers": 10,
+    "pain_points": 5,
+    "features": 7
+  },
+  "files": [
+    "manifest.json",
+    "reviews.synthetic.jsonl",
+    "competitors.synthetic.json",
+    "supplier_offers.synthetic.json",
+    "fees.v1.json",
+    "feature_taxonomy.v1.json",
+    "pain_points.synthetic.json",
+    "bad_cases/",
+    "good_cases/"
+  ],
+  "rights_notice": "All data is SYNTHETIC. Not real Amazon/Alibaba data. Redistributable."
+}

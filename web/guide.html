@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gap2SKU · 使用指南</title>
+  <link rel="stylesheet" href="/static/guide.css?v=3.0.2">
+</head>
+<body>
+  <header class="guide-nav">
+    <a class="guide-brand" href="/"><span>G</span><b>Gap2SKU</b><i></i><strong>使用指南</strong></a>
+    <nav><a href="/">进入决策室</a><a href="/story">查看产品方案</a><a class="secondary" href="http://127.0.0.1:18088/" target="_blank" rel="noreferrer">打开底层日志</a></nav>
+  </header>
+
+  <main>
+    <section class="guide-hero">
+      <p class="kicker">ONE PRIMARY ENTRY</p>
+      <h1>平时只需要打开<br>Gap2SKU 决策室</h1>
+      <p>项目选择、Agent 协作、冲突、审批和最终方案都从这里进入。Element 只在排查底层 AgentTeams 消息时使用。</p>
+      <div class="hero-actions"><a href="/">打开主工作台</a><a href="#daily-flow">查看操作顺序</a></div>
+    </section>
+
+    <section class="entry-grid" aria-label="三个网页入口">
+      <article class="entry-card primary-card"><span>01</span><p>日常主入口</p><h2>Decision Room</h2><strong>审核快照无需登录</strong><ul><li>切换已生成项目</li><li>看七名员工产出</li><li>查看历史协作事件</li><li>看冲突与结论状态</li></ul><a href="/">进入决策室</a></article>
+      <article class="entry-card"><span>02</span><p>成果展示</p><h2>Product Story</h2><strong>无需登录</strong><ul><li>切换项目</li><li>内部完整版</li><li>供应商 RFQ 版</li><li>评委演示版 / 导出 PDF</li></ul><a href="/story">查看产品方案</a></article>
+      <article class="entry-card"><span>03</span><p>部署边界</p><h2>审核快照</h2><strong>只读展示</strong><ul><li>不启动实时 AgentTeams</li><li>不暴露 MCP 或 Matrix</li><li>不写入本地数据库</li><li>适合老师审核访问</li></ul><span class="entry-note">完整运行时仅供内部部署排障</span></article>
+    </section>
+
+    <section class="guide-section" id="daily-flow">
+      <header><p>DAILY FLOW</p><h2>每次演示按这个顺序</h2></header>
+      <ol class="flow-list">
+        <li><b>启动服务</b><span>本地开发运行 <code>make local-up</code>；审核链接由云端容器直接提供。</span></li>
+        <li><b>进入决策室</b><span>只打开主工作台。顶部中间显示当前项目和本轮进度。</span></li>
+        <li><b>切换项目</b><span>点击顶部“当前项目”，从三个已生成项目中选择；页面会同步切换 Artifact、协作事件、约束和结论。</span></li>
+        <li><b>查看员工产出</b><span>用“本轮 / 决策 / 风险 / Artifact”筛选；点击产物标签查看结构化 payload，点击“展开原文”看完整交接。</span></li>
+        <li><b>查看协作记录</b><span>审核快照只展示已生成的结构化事件，不接受新的消息、审批或新品输入。</span></li>
+        <li><b>展示最终方案</b><span>点击右上“产品方案”，再切换内部、供应商和评委三种同源视图。</span></li>
+      </ol>
+    </section>
+
+    <section class="guide-section projects-section">
+      <header><p>PROJECT MODES</p><h2>三个现成项目怎么选</h2></header>
+      <div class="project-table">
+        <div><b>学生午睡枕 · 真实证据</b><span>REAL</span><p>主比赛案例。389 条评论真实，缺 RFQ/BOM/测试，所以必须 REVISE。用于展示真实 AgentTeams 协作。</p></div>
+        <div><b>桌边耳机挂架 · 公开信号</b><span>PUBLIC_SIGNAL</span><p>全新品类案例。公开供应列表只作线索，不作真实报价，因此结论 REVISE。</p></div>
+        <div><b>桌边耳机挂架 · 合成回归</b><span>SYNTHETIC</span><p>无 API Key 也能演示完整 GO、成本利润和人工审批；所有合成内容持续显式标记。</p></div>
+      </div>
+    </section>
+
+    <section class="guide-section login-section">
+      <header><p>LOGIN & API</p><h2>什么时候需要登录或输入 API</h2></header>
+      <div class="login-grid">
+        <article><h3>Decision Room / Product Story</h3><b>不登录</b><p>审核快照直接访问，默认只读。老师不需要配置 API Key，也不依赖你的电脑。</p></article>
+        <article><h3>Element</h3><b>审核快照不开放</b><p>Element、Matrix 和 AgentTeams 仅属于完整实时运行时，不进入老师访问链接。</p></article>
+        <article><h3>DeepSeek API Key</h3><b>供七名文本 Worker</b><p>负责推理、聊天、工具调用和结构化交接。只通过终端安全配置，不在网页输入。</p></article>
+        <article><h3>DashScope API Key</h3><b>只供 Qwen 生图</b><p>Prototype Designer 仍由 DeepSeek 思考，再通过 <code>image.generate</code> 调 Qwen。未配置时使用明确标记的离线合成图。</p></article>
+      </div>
+      <aside>不要在聊天、网页截图或日志中粘贴任何 API Key。配置文件 <code>.env.local</code> 由脚本以 600 权限保存并被 Git 忽略。</aside>
+    </section>
+
+    <section class="guide-section boundary-section">
+      <header><p>FACT BOUNDARY</p><h2>页面里哪些内容才算业务事实</h2></header>
+      <div><strong>聊天消息</strong><span>协作和建议</span><i>不能直接推进状态</i></div>
+      <div><strong>Task + Artifact</strong><span>版本化交付物</span><i>必须通过 Schema 与引用校验</i></div>
+      <div><strong>Reviewer + Policy</strong><span>确定性门禁</span><i>不可被 Leader 或人工说明覆盖</i></div>
+      <div><strong>Human Approval</strong><span>绑定 spec_hash</span><i>只对当前规格与政策版本有效</i></div>
+    </section>
+  </main>
+
+  <footer><span>Gap2SKU v3.0</span><p>主网页负责展示与操作；Element 只保留为底层协作日志。</p></footer>
+</body>
+</html>

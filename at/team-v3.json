@@ -1,0 +1,10 @@
+{
+  "agentTeamsVersion": "v1.2.2",
+  "team": "gap2sku-definition",
+  "leader": "gap2sku-product-architect",
+  "workers": ["gap2sku-market", "gap2sku-prototype-designer", "gap2sku-supply", "gap2sku-economics", "gap2sku-compliance", "gap2sku-reviewer"],
+  "sourceOfTruth": {"tasks": "TaskStore", "artifacts": "ArtifactStore", "chatAuthoritative": false},
+  "parallelStage": ["gap2sku-market", "gap2sku-supply", "gap2sku-compliance"],
+  "dependencies": {"gap2sku-prototype-designer": ["gap2sku-market:ACCEPTED", "gap2sku-supply:ACCEPTED"], "gap2sku-economics": ["gap2sku-supply:ACCEPTED"], "gap2sku-reviewer": ["gap2sku-product-architect:SUBMITTED"]},
+  "humanCheckpoint": {"requiredFor": ["GO", "constraint_relaxation", "compliance_uncertainty"]}
+}

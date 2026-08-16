@@ -1,0 +1,5 @@
+{
+  "case": "bad-005",
+  "rule": "R007",
+  "desc": "Economics without calculation_trace"
+}

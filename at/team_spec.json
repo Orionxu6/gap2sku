@@ -1,0 +1,58 @@
+{
+  "team": {
+    "name": "gap2sku-definition",
+    "version": "0.1.0",
+    "description": "Evidence-backed product definition for cross-border e-commerce",
+    "primary_runtime": "agentteams-real-llm",
+    "worker_runtime": "openclaw",
+    "creation_policy": {
+      "mode": "serial",
+      "order": ["product_architect", "market", "supply", "economics", "reviewer", "team"],
+      "rule": "Create next Worker only after previous is verified healthy. Product Architect is Team Leader."
+    },
+    "team_leader": {
+      "id": "gap2sku_product_architect",
+      "name": "gap2sku-product-architect",
+      "creation": "created as first Worker",
+      "rule": "Must be Team Leader. Other Workers are never leader."
+    },
+    "agent_spec_source": "inline messages in at/create_agents_messages.md",
+    "task_submission_policy": {
+      "room": "Matrix room whose name starts with Team and matches gap2sku-definition",
+      "mention": "@<team_leader_name>",
+      "rule": "Enter Team room, mention leader, paste task, wait for Spec+Review before next."
+    },
+    "tool_gateway": {
+      "transport": "http",
+      "base_url": "http://<GAP2SKU_MCP_HOST_REACHABLE_BY_WORKER>:18090",
+      "call_pattern": "POST /{role}/mcp body {tool, args}"
+    }
+  },
+  "agents": [
+    {"id": "product_architect", "name": "Product Architect", "role": "team_leader",
+     "skills": ["product-spec-synthesis", "impact-aware-replanning"], "mcp": "/leader/mcp"},
+    {"id": "market", "name": "Market Agent", "role": "worker",
+     "skills": ["market-evidence-mining"], "mcp": "/market/mcp"},
+    {"id": "supply", "name": "Supply Agent", "role": "worker",
+     "skills": ["supplier-capability-assessment"], "mcp": "/supply/mcp"},
+    {"id": "economics", "name": "Economics Agent", "role": "worker",
+     "skills": ["unit-economics-evaluation"], "mcp": "/economics/mcp"},
+    {"id": "reviewer", "name": "Reviewer Agent", "role": "worker",
+     "skills": ["evidence-review-gate"], "mcp": "/review/mcp"}
+  ],
+  "workflow": [
+    {"step": 1, "agent": "product_architect", "task": "parse_and_lock_constraints"},
+    {"step": 2, "agent": "product_architect", "task": "create_project_and_dag"},
+    {"step": 3, "agent": "market", "task": "mine_evidence_and_pain_points"},
+    {"step": 4, "agent": "supply", "task": "assess_supplier_capability"},
+    {"step": 5, "agent": "economics", "task": "calculate_unit_economics"},
+    {"step": 6, "agent": "product_architect", "task": "synthesize_spec_v1"},
+    {"step": 7, "agent": "reviewer", "task": "run_reviewer_gate"},
+    {"step": 8, "agent": "product_architect", "task": "compose_final_spec_and_report"}
+  ],
+  "risk_policy": {
+    "auto_execute": ["L0", "L1"],
+    "approval_only": ["L2", "L3"],
+    "publish_requires_human": true
+  }
+}

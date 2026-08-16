@@ -1,0 +1,125 @@
+{
+  "is_synthetic": true,
+  "skus": [
+    {
+      "sku": "COMP-001",
+      "brand": "BrandA",
+      "price": 29.99,
+      "rating": 4.2,
+      "reviews": 1200,
+      "features": [
+        "wider_base",
+        "silicone_pad"
+      ],
+      "size_max": 15.6
+    },
+    {
+      "sku": "COMP-002",
+      "brand": "BrandB",
+      "price": 34.99,
+      "rating": 4.5,
+      "reviews": 2100,
+      "features": [
+        "wider_base",
+        "silicone_pad",
+        "height_adjustable"
+      ],
+      "size_max": 17.0
+    },
+    {
+      "sku": "COMP-003",
+      "brand": "BrandC",
+      "price": 24.99,
+      "rating": 3.8,
+      "reviews": 800,
+      "features": [
+        "silicone_pad"
+      ],
+      "size_max": 15.6
+    },
+    {
+      "sku": "COMP-004",
+      "brand": "BrandD",
+      "price": 39.99,
+      "rating": 4.7,
+      "reviews": 3400,
+      "features": [
+        "wider_base",
+        "silicone_pad",
+        "double_axis",
+        "16_inch_compatibility"
+      ],
+      "size_max": 17.3
+    },
+    {
+      "sku": "COMP-005",
+      "brand": "BrandE",
+      "price": 27.99,
+      "rating": 4.0,
+      "reviews": 950,
+      "features": [
+        "wider_base",
+        "stiffened_hinge"
+      ],
+      "size_max": 15.6
+    },
+    {
+      "sku": "COMP-006",
+      "brand": "BrandF",
+      "price": 44.99,
+      "rating": 4.6,
+      "reviews": 1800,
+      "features": [
+        "wider_base",
+        "silicone_pad",
+        "carbon_fiber_structure"
+      ],
+      "size_max": 17.0
+    },
+    {
+      "sku": "COMP-007",
+      "brand": "BrandG",
+      "price": 19.99,
+      "rating": 3.5,
+      "reviews": 500,
+      "features": [],
+      "size_max": 14.0
+    },
+    {
+      "sku": "COMP-008",
+      "brand": "BrandH",
+      "price": 32.99,
+      "rating": 4.3,
+      "reviews": 1500,
+      "features": [
+        "silicone_pad",
+        "height_adjustable",
+        "16_inch_compatibility"
+      ],
+      "size_max": 17.0
+    },
+    {
+      "sku": "COMP-009",
+      "brand": "BrandI",
+      "price": 36.99,
+      "rating": 4.4,
+      "reviews": 1100,
+      "features": [
+        "wider_base",
+        "double_axis"
+      ],
+      "size_max": 16.0
+    },
+    {
+      "sku": "COMP-010",
+      "brand": "BrandJ",
+      "price": 22.99,
+      "rating": 3.9,
+      "reviews": 700,
+      "features": [
+        "silicone_pad"
+      ],
+      "size_max": 15.6
+    }
+  ]
+}

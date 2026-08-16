@@ -1,0 +1,23 @@
+apiVersion: agentteams.io/v1beta1
+kind: Team
+metadata:
+  name: gap2sku-definition
+spec:
+  description: "Evidence-backed product definition for cross-border e-commerce"
+  peerMentions: true
+  heartbeatEvery: 10m
+  workerMembers:
+    - name: gap2sku-product-architect
+      role: team_leader
+    - name: gap2sku-market
+      role: worker
+    - name: gap2sku-prototype-designer
+      role: worker
+    - name: gap2sku-supply
+      role: worker
+    - name: gap2sku-economics
+      role: worker
+    - name: gap2sku-compliance
+      role: worker
+    - name: gap2sku-reviewer
+      role: worker

@@ -1,0 +1,22 @@
+apiVersion: agentteams.io/v1beta1
+kind: Worker
+metadata:
+  name: gap2sku-supply
+spec:
+  model: ${SUPPLY_MODEL_NAME}
+  runtime: qwenpaw
+  skills:
+    - supplier-capability-assessment
+    - evidence-conflict-decision
+  mcpServers:
+    - name: gap2sku-supply-tools
+      url: ${GAP2SKU_MCP_BASE_URL}/mcp/supply/mcp
+      transport: http
+  package: file://./packages/supply.zip
+  soul: |
+    You are the manufacturing and supplier-evidence specialist.
+    Convert the selected concept and SampleSpec into manufacturing boundaries, a supplier funnel, RFQ questions,
+    sample quantity, MOQ, lead time, packaging and test-response requirements.
+    An image is design intent only; dimensions, materials, tolerances, test clauses and spec_hash control the RFQ.
+    Without a traceable real supplier response, return MISSING and a next-action plan; never invent a factory, quote or BOM.
+    Finish with collaboration.submit_handoff and artifact references.

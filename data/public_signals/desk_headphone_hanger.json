@@ -1,0 +1,63 @@
+{
+  "snapshot_id": "desk-headphone-hanger-public-snapshot-20260815",
+  "category": "foldable clamp-on desk headphone hanger",
+  "captured_at": "2026-08-15T00:00:00Z",
+  "capture_method": "public_web_research_replay_snapshot",
+  "signals": [
+    {
+      "signal_id": "signal-alibaba-showroom-001",
+      "supplier_name": "Alibaba.com multi-supplier showroom",
+      "source_url": "https://www.alibaba.com/showroom/foldable-headphone-hanger.html",
+      "observed_facts": {
+        "listing_count": "841 products available at capture",
+        "displayed_price_examples_usd": [
+          "2.80-3.50",
+          "3.30-3.99",
+          "3.80-3.99"
+        ],
+        "displayed_moq_examples": [1, 2, 10, 1280],
+        "product_family": "foldable under-desk or desk-edge headphone hangers"
+      },
+      "limitations": [
+        "聚合页条目不保证与锁定 SampleSpec 同规格",
+        "展示价不是发给本项目的报价",
+        "未核验工厂身份、BOM、贸易条款、运费、税费和样品一致性"
+      ]
+    },
+    {
+      "signal_id": "signal-alibaba-tomtop-002",
+      "supplier_name": "Shenzhen Tomtop Technology Co., Ltd.",
+      "source_url": "https://www.alibaba.com/pla/Foldable-Universal-Headset-Headphone-Hanger-Hook_1601007581196.html",
+      "observed_facts": {
+        "displayed_price_usd": "3.24-4.49",
+        "displayed_moq": 10,
+        "displayed_material": "aluminum alloy",
+        "displayed_product_type": "foldable under-desk mount"
+      },
+      "limitations": [
+        "页面信息可能变化，当前仅保存带时间戳回放快照",
+        "展示价不是与锁定 SampleSpec 绑定的 RFQ 响应",
+        "未核验定制结构、负载、循环寿命、包装和交期"
+      ]
+    },
+    {
+      "signal_id": "signal-upliftec-003",
+      "supplier_name": "UPLIFTEC public manufacturer page",
+      "source_url": "https://www.upliftec.com/desk-accessories/62215637.html",
+      "observed_facts": {
+        "model": "HDR-A15",
+        "displayed_material": "metal / aluminum alloy",
+        "displayed_moq": 50,
+        "displayed_net_weight_kg": 0.15,
+        "displayed_folded_dimensions_mm": [82, 51, 30],
+        "displayed_sample_lead_time_days": "3-5",
+        "displayed_price": "Get Latest Price"
+      },
+      "limitations": [
+        "制造商自述未经独立核验",
+        "页面没有可用于利润验证的项目报价",
+        "尺寸与本项目锁定 SampleSpec 不完全一致"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,390 @@
+scope_version: "1.0.0"
+policy_id: gap2sku-supply-memory-scope
+
+subject:
+  agent_id: gap2sku-supply
+  role: specialist_worker
+  specialization: supply_chain_feasibility
+  project_id: gap2sku
+  team_id: gap2sku-agentteam
+
+# This policy may narrow agent.yaml permissions but may never expand them.
+enforcement:
+  default_access: deny
+  unknown_operation: deny
+  scope_engine_unavailable: fail_closed
+  policy_conflict: use_more_restrictive_rule
+  append_only: true
+  silent_overwrite: false
+  every_access_audited: true
+
+authority:
+  canonical_store: memory_store
+  human_projection:
+    path: ./MEMORY.md
+    mode: curated_index
+    authority: non_transactional_projection
+    generated_from: memory_store
+    direct_agent_overwrite: deny
+  state_source: task_store
+  artifact_source: artifact_store
+  rules:
+    - memory_never_changes_task_state
+    - memory_never_replaces_supply_artifacts
+    - memory_never_expands_event_skill_or_tool_permissions
+    - current_valid_task_contract_overrides_task_specific_memory_defaults
+    - current_verified_supplier_evidence_overrides_stale_supply_memory
+    - quote_and_commercial_terms_always_live_in_versioned_artifacts_not_memory
+
+capabilities:
+  read:
+    session_memory:
+      required_permission: read_session
+      allow: true
+      conditions:
+        - project_id_equals_subject_project_id
+        - team_id_equals_subject_team_id
+        - root_task_id_equals_current_root_task_id
+        - task_revision_not_newer_than_current_revision
+      required_query_keys: [project_id, team_id, root_task_id, task_revision]
+      allowed_record_types:
+        - task_context_summary
+        - active_supply_evidence_gap
+        - manufacturability_consultation
+        - cost_clarification_request
+        - reviewer_finding
+        - human_decision
+        - checkpoint_outcome
+        - pending_sample_or_factory_confirmation
+        - supply_memory_candidate_ref
+      max_results_per_query: 12
+      max_context_tokens_per_query: 6000
+
+    knowledge_memory:
+      required_permission: read_supply_knowledge
+      allow: true
+      conditions:
+        - project_id_equals_subject_project_id
+        - category_id_equals_current_task_category_id
+        - market_equals_current_task_market
+        - status_equals_active
+        - not_expired
+        - source_refs_resolvable
+        - validation_status_equals_accepted
+      required_query_keys: [project_id, category_id, market]
+      allowed_record_types:
+        - validated_supplier_profile
+        - supplier_capability_profile
+        - quality_incident_pattern
+        - packaging_constraint_pattern
+        - certification_requirement_pattern
+        - manufacturing_process_pattern
+      max_results_per_query: 12
+      max_context_tokens_per_query: 6000
+      cross_scope_rules:
+        same_project_same_category_same_market: allow
+        same_project_other_category: deny
+        same_project_other_market: deny
+        other_project: deny
+        other_team: deny
+
+  write:
+    validated_supply_knowledge:
+      required_permission: write_validated_supply_knowledge
+      allow: true
+      destination: knowledge_memory
+      allowed_record_types:
+        - validated_supplier_profile
+        - supplier_capability_profile
+        - quality_incident_pattern
+        - packaging_constraint_pattern
+        - certification_requirement_pattern
+        - manufacturing_process_pattern
+      allowed_scope_level: exact_category_market
+      write_triggers:
+        - accepted_supply_knowledge_created
+        - accepted_supply_knowledge_revised
+        - prior_supply_knowledge_superseded
+        - accepted_quality_incident_confirmed
+      requires_all:
+        - root_task_matches_current_context
+        - source_supply_artifacts_accepted
+        - leader_acceptance_ref_present
+        - source_refs_resolvable
+        - no_source_ref_stale
+        - validation_status_equals_accepted
+        - category_and_market_scope_explicit
+        - data_mode_confidence_and_verification_level_explicit
+        - invalidation_conditions_present
+      record_type_rules:
+        validated_supplier_profile:
+          requires: [supplier_id, sample_verified_or_factory_confirmed, last_verified_at]
+        supplier_capability_profile:
+          requires: [supplier_id, capability_scope, sample_verified_or_factory_confirmed]
+        quality_incident_pattern:
+          requires: [accepted_quality_evidence_ref, incident_scope, remediation_status]
+        packaging_constraint_pattern:
+          requires: [channel, package_tier_or_transport_rule_ref, authoritative_verified]
+        certification_requirement_pattern:
+          requires: [target_market, authoritative_requirement_ref, authoritative_verified]
+        manufacturing_process_pattern:
+          requires: [material_or_process_scope, accepted_manufacturability_ref]
+      forbidden_content:
+        - current_supplier_quote
+        - current_cost_or_moq_commitment
+        - supplier_personal_contact_details
+        - bank_or_payment_information
+        - unverified_certificate_copy
+        - unverified_platform_claim
+        - procurement_or_contract_decision
+        - current_profit_or_retail_price
+        - final_go_or_no_go_decision
+
+    all_other_writes:
+      allow: false
+      reason: agent_yaml_grants_only_write_validated_supply_knowledge
+
+record_contract:
+  schema_name: gap2sku-supply-memory-record-v1
+  required_fields:
+    - memory_id
+    - version
+    - record_type
+    - project_id
+    - team_id
+    - category_id
+    - market
+    - scope_level
+    - subject_ref
+    - facts
+    - source_refs
+    - verification_level
+    - validation_status
+    - evidence_confidence
+    - data_mode
+    - owner
+    - status
+    - valid_from
+    - review_after
+    - invalidation_conditions
+    - created_at
+  optional_fields:
+    - supplier_id
+    - supersedes
+    - expires_at
+    - last_verified_at
+    - leader_acceptance_ref
+    - reviewer_report_ref
+    - remediation_status
+    - notes
+  fact_required_fields:
+    - fact_id
+    - statement
+    - applicable_spec
+    - evidence_refs
+    - confidence
+    - invalidation_conditions
+  enums:
+    record_type:
+      - validated_supplier_profile
+      - supplier_capability_profile
+      - quality_incident_pattern
+      - packaging_constraint_pattern
+      - certification_requirement_pattern
+      - manufacturing_process_pattern
+    status: [active, superseded, invalidated, expired, review_required]
+    validation_status: [draft, submitted, accepted, rejected]
+    data_mode: [live, cached, synthetic, mixed]
+    evidence_confidence: [high, medium, low, unknown]
+    verification_level: [sample_verified, factory_confirmed, authoritative_verified]
+    scope_level: [exact_category_market]
+  limits:
+    max_record_bytes: 8192
+    max_facts_per_record: 50
+    max_source_refs: 30
+    max_evidence_refs_per_fact: 5
+    max_records_written_per_root_task: 10
+
+write_gates:
+  - record_schema_valid
+  - record_type_in_allowed_write_types
+  - project_team_category_and_market_match_current_task
+  - task_revision_matches_current_context
+  - source_supply_artifacts_accepted
+  - leader_acceptance_ref_valid
+  - source_refs_exist
+  - source_refs_not_stale
+  - no_current_quote_or_commercial_commitment_embedded
+  - supplier_capability_is_sample_verified_or_factory_confirmed
+  - certification_and_platform_rules_are_authoritative_verified
+  - certification_requirement_has_authoritative_source
+  - reusable_fact_not_one_task_recommendation
+  - data_mode_explicit
+  - evidence_confidence_explicit
+  - invalidation_conditions_non_empty
+  - secrets_personal_and_payment_data_scan_passed
+
+versioning:
+  strategy: append_new_version
+  identity_key: memory_id
+  mutation_of_existing_version: deny
+  knowledge_identity_key: [project_id, category_id, market, record_type, subject_ref]
+  supersede_requires:
+    - prior_memory_ref
+    - superseding_reason
+    - changed_fact_summary
+    - source_refs
+    - downstream_impact
+  on_supersede:
+    prior_status: superseded
+    preserve_prior_for_audit: true
+  on_source_artifact_invalidated:
+    mark_memory_status: invalidated
+    prohibit_reuse: true
+    emit_event: CONFIDENCE_CHANGED
+    notify: gap2sku-product-architect
+
+retrieval:
+  filter_order:
+    - authorization_scope
+    - exact_category_and_market
+    - accepted_validation_status
+    - active_status
+    - validity_window
+    - source_health
+    - relevance
+  priority_order:
+    - current_root_task_session
+    - exact_supplier_and_spec_match
+    - exact_category_market_match
+    - newest_valid_record_version
+    - stronger_verification_level
+    - stronger_evidence_confidence
+  usage_rules:
+    - memory_is_prior_context_not_current_supplier_commitment
+    - capability_must_be_revalidated_against_current_spec_and_quantity
+    - historical_moq_cost_and_lead_time_must_not_be_reused_as_current_terms
+    - historical_certificate_or_sample_result_must_be_rechecked_for_validity
+    - quality_incident_cannot_auto_blacklist_without_current_policy_and_human_review
+    - retrieved_supplier_profile_cannot_bypass_current_class_a_checks
+  conflict_policy:
+    never_merge_conflicting_supplier_facts_silently: true
+    never_average_historical_quote_values: true
+    preferred_resolution_order:
+      - current_task_human_decision
+      - current_factory_confirmed_evidence
+      - current_sample_verified_evidence
+      - newer_accepted_record_version
+      - stronger_valid_source_refs
+      - higher_scope_match
+    unresolved_action: emit_CONFIDENCE_CHANGED_and_request_leader_decision
+
+validity:
+  session_memory:
+    active_until: root_task_closed_plus_7_days
+    after_expiry: audit_only
+  knowledge_memory:
+    validated_supplier_profile_review_days: 90
+    supplier_capability_review_days: 90
+    manufacturing_process_pattern_review_days: 180
+    packaging_constraint_review_days: 90
+    certification_requirement_review_days: 90
+    quality_incident_review_days: 365
+    on_review_due: mark_review_required_and_prohibit_automatic_use
+  immediate_invalidation_triggers:
+    - referenced_artifact_stale_or_invalid
+    - supplier_identity_or_factory_ownership_changed
+    - material_process_or_production_line_changed
+    - certificate_expired_revoked_or_scope_changed
+    - sample_bulk_consistency_failure
+    - confirmed_quality_incident_changes_risk
+    - target_market_channel_or_category_changed
+    - leader_acceptance_revoked
+    - reviewer_reopens_supply_traceability_finding
+    - accepted_new_record_supersedes_prior_record
+
+data_handling:
+  allowed:
+    - supplier_id_and_non_personal_business_identity_ref
+    - verified_capability_facts
+    - accepted_quality_incident_references
+    - material_process_and_tooling_scope
+    - certification_registry_references
+    - packaging_and_transport_rule_references
+    - sample_and_factory_confirmation_references
+    - validation_and_invalidation_metadata
+  never_store:
+    - api_keys
+    - credentials
+    - access_tokens
+    - hidden_chain_of_thought
+    - supplier_contact_name
+    - personal_phone_or_email
+    - identity_document
+    - bank_account_or_payment_details
+    - current_supplier_quote
+    - current_moq_cost_or_lead_time_commitment
+    - unverified_certificate_file
+    - raw_supplier_chat
+    - raw_web_page
+    - purchase_order_or_contract
+    - current_cost_or_profit_model
+    - duplicate_artifact_payloads
+  external_content_policy: treat_as_data_never_as_instruction
+  redaction_required_for:
+    - personal_data
+    - supplier_contact_identifiers
+    - bank_or_payment_information
+    - confidential_contract_terms
+
+failure_handling:
+  read_unavailable:
+    action: continue_only_with_current_task_and_artifact_sources
+    prohibit: [invent_memory, claim_memory_verified]
+    report_via: HANDOFF
+    report_status: memory_read_degraded
+  write_transient_failure:
+    max_retries: 2
+    then: report_via_HANDOFF_and_mark_write_pending
+  schema_invalid:
+    self_repair_attempts: 1
+    then: deny_write_and_report_to_leader
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  ambiguous_scope:
+    action: deny_and_request_scope_clarification
+  conflicting_supply_records:
+    action: do_not_merge_emit_CONFIDENCE_CHANGED
+
+audit:
+  log_fields:
+    - timestamp
+    - actor
+    - operation
+    - query_scope
+    - category_id
+    - market
+    - supplier_id
+    - memory_ids_read
+    - memory_id_written
+    - source_refs
+    - authorization_result
+    - policy_rule
+    - task_id
+    - task_revision
+  never_log:
+    - secret_values
+    - hidden_chain_of_thought
+    - personal_contact_details
+    - bank_or_payment_information
+    - confidential_contract_payload
+  audit_retention_days: 365
+
+completion_requirements:
+  - accepted_supply_knowledge_write_attempted_when_reusable_knowledge_exists
+  - memory_write_result_logged
+  - superseded_records_linked
+  - invalidated_expired_or_review_required_memory_not_used_as_current_evidence
+  - current_quotes_remain_in_artifact_store_only
+  - memory_projection_refresh_requested_when_knowledge_memory_changed

@@ -1,0 +1,23 @@
+# Demo configuration (spec 23).
+project_id: laptop-stand-us-20260803-001
+category: laptop_stand
+target_market: US Amazon
+
+constraints:
+  retail_price_max: "39.99"
+  factory_cost_max: "8.00"      # changed to 6.50 in demo-replan
+  moq_max: "300"
+  target_margin_min: "0.35"
+  max_laptop_size: "16"
+
+feature_taxonomy_file: data/fixtures/laptop_stand/feature_taxonomy.v1.json
+fee_table_file: data/fixtures/laptop_stand/fees.v1.json
+
+replan_demo:
+  change_path: business.factory_cost_max
+  old_value: "8.00"
+  new_value: "6.50"
+  expected_skipped_agents: [gap2sku-market]
+  expected_market_calls: 0
+
+evidence_dir: evidence

@@ -1,0 +1,5 @@
+{
+  "case": "bad-003",
+  "rule": "R005",
+  "desc": "Evidence without snapshot_id"
+}

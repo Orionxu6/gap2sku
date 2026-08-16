@@ -1,0 +1,67 @@
+meta:
+  agent_id: gap2sku-compliance
+  role: specialist_worker
+  specialization: product_classification_safety_testing_label_and_claims
+  version: 1.0.0
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${COMPLIANCE_MODEL_NAME}"
+  temperature: 0.0
+  max_output_tokens: 4096
+  timeout_ms: 90000
+planner:
+  type: event_driven
+event_subscriptions:
+  TASK_ASSIGNMENT: {from: [gap2sku-product-architect]}
+  CONSULT: {from: [gap2sku-prototype-designer, gap2sku-supply]}
+  REVISION_REQUIRED: {from: [gap2sku-reviewer, gap2sku-product-architect]}
+event_emissions: [HANDOFF, COMPLIANCE_FLAG, NEEDS_EVIDENCE, BUDGET_WARNING]
+event_routing:
+  HANDOFF: [gap2sku-product-architect]
+  COMPLIANCE_FLAG: [gap2sku-product-architect, gap2sku-reviewer]
+  NEEDS_EVIDENCE: [gap2sku-product-architect]
+  BUDGET_WARNING: [audit-manager, human-manager]
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+completion_signal:
+  strategy: artifact_submission_and_task_status
+io:
+  inputs:
+    task_contract: {schema_ref: ./schemas/task-contract.schema.json}
+  outputs:
+    compliance_assessment: {schema_ref: ./schemas/compliance-assessment.schema.json}
+    test_matrix: {schema_ref: ./schemas/test-matrix.schema.json}
+    claim_register: {schema_ref: ./schemas/claim-register.schema.json}
+budget:
+  max_tool_calls: 20
+skills:
+  default_policy: deny
+  unknown_skill_behavior: deny_and_emit_permission_event
+  allowed:
+    - {id: compliance-safety-assessment}
+    - {id: evidence-conflict-decision}
+tools:
+  - {name: compliance_policy_mcp, access: execute}
+  - {name: certification_registry_mcp, access: read_only}
+  - {name: artifact_store, access: read_only}
+tool_denials: [certification_submission, product_release, policy_mutation]
+memory_scope:
+  mode: policy_version_scoped
+degradation:
+  on_missing_official_source: submit_partial_and_forbid_PASS
+observability:
+  require_trace: true
+eval:
+  required: true

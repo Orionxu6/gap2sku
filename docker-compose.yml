@@ -1,0 +1,11 @@
+services:
+  workbench:
+    build: .
+    command: ["python", "-m", "gap2sku.workbench", "--host", "0.0.0.0", "--port", "8080"]
+    ports: ["8080:8080"]
+    volumes: ["./shared:/app/shared", "./evidence:/app/evidence"]
+  mcp:
+    build: .
+    command: ["python", "-m", "gap2sku.mcp_server", "--host", "0.0.0.0", "--port", "18090", "--db", "shared/nap_pillow.db"]
+    ports: ["18090:18090"]
+    volumes: ["./shared:/app/shared", "./evidence:/app/evidence"]

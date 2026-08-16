@@ -1,0 +1,579 @@
+# ============================================================================
+# Gap2SKU - Market Agent 契约配置
+# agent_id: gap2sku-market
+# 版本: v1.0.0
+# 对齐: SOUL_market_v2.md + Leader agent.yaml v1.1
+# 读者: Gap2SKU Contract Loader / AgentTeams Runtime
+# ============================================================================
+
+meta:
+  agent_id: gap2sku-market
+  runtime_aliases: [market-agent, gap2sku-customer-insight]
+  role: specialist_worker
+  specialization: market_and_customer_evidence
+  version: 1.0.0
+  package_layout_version: 1
+  soul_ref: ./SOUL.md
+  protocol_ref: ./AGENTS.md
+  rubric_ref: ./rubrics.md
+  memory_scope_ref: ./memory.scope
+  reports_to: gap2sku-product-architect
+  collaborators:
+    - gap2sku-product-architect
+    - gap2sku-supply
+    - gap2sku-economics
+    - gap2sku-reviewer
+    - human-manager
+
+# 本文件不是 AgentTeams 原生 Worker CRD，必须由 Gap2SKU Loader 强制执行。
+runtime_adapter:
+  contract: gap2sku.agent/v1
+  loader_env: GAP2SKU_AGENT_CONTRACT_LOADER
+  required: true
+  on_missing: fail_startup
+  reject_unknown_fields: true
+  platform: agentteams
+
+model:
+  provider: "${MODEL_PROVIDER}"
+  name: "${MARKET_MODEL_NAME}"
+  temperature: 0.1
+  max_output_tokens: 4096
+  timeout_ms: 60000
+  required_capabilities: [json_output, tool_calls]
+  provider_options:
+    deepseek:
+      thinking: enabled
+      reasoning_effort: medium
+  retry:
+    max_attempts: 2
+    backoff_ms: [2000, 5000]
+    retry_on: [timeout, rate_limited, transport_error, temporary_provider_error]
+    never_retry_on: [schema_invalid, permission_denied, hard_constraint_violation]
+    on_failure: submit_partial_with_gap_or_pause
+
+# ----------------------------------------------------------------------------
+# 事件驱动分析循环
+# ----------------------------------------------------------------------------
+planner:
+  type: event_driven
+  tick_trigger:
+    - event_received
+    - task_assigned
+    - tool_result_received
+    - artifact_invalidated
+    - reviewer_finding_received
+    - budget_threshold_reached
+
+  reasoning_steps:
+    - read_task_contract_and_market_scope
+    - read_constraints_and_current_revision
+    - read_scoped_market_memory
+    - inspect_required_inputs_and_evidence_freshness
+    - collect_or_reuse_allowed_evidence
+    - normalize_deduplicate_and_label_sources
+    - run_sample_adequacy_and_dual_source_checks
+    - run_five_filter_pain_point_test
+    - run_positive_review_and_pioneer_checks
+    - build_demand_gap_and_feature_hypotheses
+    - identify_conflicts_gaps_and_downstream_questions
+    - validate_outputs_and_emit_actions
+
+  allowed_actions:
+    - action: collect_market_evidence
+      requires: [task_id, target_market, query_scope, allowed_sources]
+    - action: mine_reviews
+      requires: [evidence_snapshot_ref, labeling_taxonomy_ref]
+    - action: analyze_competitors
+      requires: [competitor_snapshot_ref, target_market]
+    - action: verify_quantitative_signal
+      requires: [claim, source_refs]
+      guard: source_count_at_least_2
+    - action: build_demand_structure
+      requires: [accepted_evidence_refs, target_user_segments]
+    - action: build_pain_point_set
+      requires: [accepted_review_evidence_refs, five_filter_results]
+    - action: build_competitor_gap_map
+      requires: [accepted_competitor_refs, concentration_result]
+    - action: build_feature_hypotheses
+      requires: [pain_point_set_ref, competitor_gap_map_ref]
+    - action: request_consultation
+      requires: [target_agent, question, artifact_refs, response_condition]
+    - action: request_more_evidence
+      requires: [evidence_gap, attempted_sources, impact]
+    - action: propose_early_no_go
+      requires: [evidence_refs, trigger, confidence]
+    - action: revise_market_artifact
+      requires: [review_finding_ref, prior_artifact_refs]
+    - action: submit_artifacts
+      requires: [validated_output_refs, task_id, revision]
+      guard: all_required_outputs_schema_valid
+    - action: write_market_taxonomy_memory
+      requires: [accepted_taxonomy_ref, reusable_scope, validation_status]
+      guard: task_artifacts_accepted
+    - action: wait
+
+# ----------------------------------------------------------------------------
+# 协作事件
+# FEASIBILITY_REQUEST 统一映射为 CONSULT，避免出现未注册事件。
+# ----------------------------------------------------------------------------
+event_aliases:
+  FEASIBILITY_REQUEST:
+    canonical_event: CONSULT
+    required_payload: {consult_type: manufacturability}
+
+event_subscriptions:
+  TASK_ASSIGNMENT:
+    from: [gap2sku-product-architect]
+    candidate_actions: [collect_market_evidence, wait]
+  CONSULT:
+    from: [gap2sku-product-architect, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [analyze_competitors, verify_quantitative_signal, build_feature_hypotheses]
+  FEASIBILITY_FEEDBACK:
+    from: [gap2sku-supply]
+    candidate_actions: [build_feature_hypotheses, request_more_evidence, submit_artifacts]
+  CONSTRAINT_VIOLATION:
+    from: [gap2sku-product-architect, gap2sku-supply, gap2sku-economics]
+    candidate_actions: [build_feature_hypotheses, request_consultation, propose_early_no_go]
+  REVIEW_FINDING:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_market_artifact, request_more_evidence]
+  REVISION_REQUIRED:
+    from: [gap2sku-reviewer, gap2sku-product-architect]
+    candidate_actions: [revise_market_artifact, collect_market_evidence]
+    guard: revision_count_below_limit
+  HUMAN_DECISION:
+    from: [human-manager, gap2sku-product-architect]
+    candidate_actions: [collect_market_evidence, build_feature_hypotheses, submit_artifacts]
+    guard: human_decision_payload_valid
+
+event_emissions:
+  - HANDOFF
+  - CONSULT
+  - EVIDENCE_CHALLENGE
+  - CONSTRAINT_VIOLATION
+  - NEEDS_EVIDENCE
+  - EARLY_NO_GO_SIGNAL
+  - PRICE_VIABILITY_REQUEST
+  - CONFIDENCE_CHANGED
+
+event_routing:
+  HANDOFF: [gap2sku-product-architect]
+  CONSULT: [gap2sku-supply, gap2sku-economics]
+  EVIDENCE_CHALLENGE: [gap2sku-product-architect]
+  CONSTRAINT_VIOLATION: [gap2sku-product-architect]
+  NEEDS_EVIDENCE: [gap2sku-product-architect]
+  EARLY_NO_GO_SIGNAL: [gap2sku-product-architect]
+  PRICE_VIABILITY_REQUEST: [gap2sku-product-architect]
+  CONFIDENCE_CHANGED: [gap2sku-product-architect]
+
+event_contract:
+  schema_ref: ./schemas/collab-event.schema.json
+  reject_unknown_event: true
+  require_task_and_revision: true
+  require_artifact_refs_for:
+    - HANDOFF
+    - EVIDENCE_CHALLENGE
+    - CONSTRAINT_VIOLATION
+    - NEEDS_EVIDENCE
+    - EARLY_NO_GO_SIGNAL
+    - PRICE_VIABILITY_REQUEST
+    - CONFIDENCE_CHANGED
+  required_common_fields:
+    - event_id
+    - event_type
+    - task_id
+    - revision
+    - from_role
+    - to_roles
+    - confidence
+    - data_mode
+    - requested_action
+
+# ----------------------------------------------------------------------------
+# 输入与输出契约
+# ----------------------------------------------------------------------------
+io:
+  inputs:
+    task_contract:
+      schema_ref: ./schemas/task-contract.schema.json
+      required_on: [task_start]
+    market_task_input:
+      schema_ref: ./schemas/market-task-input.schema.json
+      required_fields:
+        - target_market
+        - target_category
+        - target_user_or_segment
+        - channel
+        - time_window
+        - constraints_ref
+        - allowed_data_sources
+    artifacts:
+      consumed_types:
+        - task-contract
+        - product-constraints
+        - market-evidence-snapshot
+        - review-evidence-snapshot
+        - competitor-records-snapshot
+        - interview-evidence
+        - category-taxonomy
+        - manufacturability-feedback
+        - price-viability-feedback
+        - review-findings
+      acceptance_rule: only_valid_and_scope_matching
+    events:
+      schema_ref: ./schemas/collab-event.schema.json
+
+  outputs:
+    demand_structure:
+      artifact_type: demand-structure
+      schema_ref: ./schemas/demand-structure.schema.json
+      required_fields:
+        - target_segments
+        - use_scenarios
+        - demand_signals
+        - search_or_category_signals
+        - concentration
+        - evidence_refs
+        - confidence
+        - data_mode
+    pain_point_set:
+      artifact_type: pain-point-set
+      schema_ref: ./schemas/pain-point-set.schema.json
+      required_fields:
+        - pain_points
+        - sample_profile
+        - five_filter_results
+        - original_excerpt_refs
+        - evidence_refs
+        - bias_disclosure
+        - confidence
+        - data_mode
+    competitor_gap_map:
+      artifact_type: competitor-gap-map
+      schema_ref: ./schemas/competitor-gap-map.schema.json
+      required_fields:
+        - competitors
+        - solved_and_unsolved_gaps
+        - pioneer_comparison
+        - top3_sales_concentration
+        - evidence_refs
+        - confidence
+        - data_mode
+    feature_hypotheses:
+      artifact_type: feature-hypotheses
+      schema_ref: ./schemas/feature-hypotheses.schema.json
+      required_fields:
+        - hypotheses
+        - linked_pain_point_refs
+        - target_user_and_scenario
+        - priority
+        - counter_evidence
+        - validation_requests
+        - confidence
+        - data_mode
+    market_evidence_summary:
+      artifact_type: market-evidence-summary
+      schema_ref: ./schemas/market-evidence-summary.schema.json
+      required_fields:
+        - source_inventory
+        - freshness_summary
+        - sample_limitations
+        - confidence_summary
+        - unsupported_claims
+        - open_evidence_gaps
+    raw_evidence_index:
+      artifact_type: market-raw-evidence-index
+      schema_ref: ./schemas/market-raw-evidence-index.schema.json
+      required_fields:
+        - evidence_id
+        - source_type
+        - source_uri_or_snapshot_ref
+        - captured_at
+        - market
+        - original_excerpt_ref
+        - usage_rights
+
+  submission_bundle:
+    required_artifact_types:
+      - demand-structure
+      - pain-point-set
+      - competitor-gap-map
+      - feature-hypotheses
+      - market-evidence-summary
+      - market-raw-evidence-index
+    partial_mode:
+      allowed: true
+      requires: [missing_items, attempted_sources, downstream_impact]
+      forbidden_claims: [market_validated, demand_confirmed, guaranteed_sales]
+      forced_events: [NEEDS_EVIDENCE]
+
+# ----------------------------------------------------------------------------
+# 证据和判断规则
+# ----------------------------------------------------------------------------
+evidence_policy:
+  claim_requires_evidence_id: true
+  original_excerpt_required_for_pain_points: true
+  source_types:
+    - live_platform
+    - cached_snapshot
+    - synthetic_fixture
+    - human_confirmed
+    - interview
+    - third_party_reference
+  data_mode_enum: [live, cached, synthetic, mixed]
+  confidence_enum: [high, medium, low, unknown]
+  confidence_mapping:
+    high: dual_source_consistent_and_within_30_days
+    medium: single_source_or_30_to_90_days
+    low: synthetic_inferred_or_unverified
+    unknown: evidence_unavailable_or_conflicting
+  freshness:
+    quantitative_market_signal_days: 30
+    stale_action: mark_stale_and_prohibit_as_only_key_support
+  dual_source_check:
+    required_for: [search_volume, cpc, market_size, category_growth]
+    trend_rule: sources_must_move_same_direction
+    value_rule: use_conservative_lower_value
+    deviation_threshold: 0.20
+    on_threshold_exceeded: emit_CONFIDENCE_CHANGED_and_request_human_review
+  sample_adequacy:
+    preferred_listing_coverage: 10
+    preferred_low_rating_review_count: 500
+    insufficient_action: expand_scope_once_then_emit_NEEDS_EVIDENCE
+    scope_expansion_must_be_disclosed: true
+  pain_point_filter:
+    low_rating_share_threshold: 0.15
+    required_checks:
+      - frequency
+      - structural_not_incidental
+      - pain_severity
+      - design_translatability
+      - commercial_differentiability
+    below_threshold_exception: EDGE_CASE
+  anti_self_deception:
+    required_checks:
+      - positive_review_validation
+      - pioneer_competitor_comparison
+      - survivor_bias_disclosure
+  market_concentration:
+    metric: top3_sales_share
+    early_no_go_threshold: 0.70
+    on_threshold_exceeded: emit_EARLY_NO_GO_SIGNAL
+  supply_side_signal_rule: cannot_form_opportunity_without_level_1_or_2_demand_signal
+
+# ----------------------------------------------------------------------------
+# 状态与权限
+# ----------------------------------------------------------------------------
+state_machine:
+  canonical_states: [PENDING, READY, RUNNING, SUBMITTED, ACCEPTED, REVISE, BLOCKED, FAILED, CANCELLED]
+  transition_permissions:
+    gap2sku-market:
+      PENDING: [READY]
+      READY: [RUNNING]
+      RUNNING: [SUBMITTED, FAILED]
+    gap2sku-product-architect:
+      SUBMITTED: [REVISE]
+      BLOCKED: [REVISE]
+    gap2sku-reviewer:
+      SUBMITTED: [BLOCKED]
+    acceptance-gate:
+      SUBMITTED: [ACCEPTED]
+  rules:
+    - worker_cannot_self_accept: true
+    - worker_cannot_self_block_for_business_reason: true
+    - revision_limit: 3
+    - every_transition_logged: [event, actor, timestamp, input_version, output_version]
+
+hard_constraints:
+  - id: MHC-01
+    rule: cannot_decide_manufacturability_supplier_or_moq
+    enforcement: output_validator
+  - id: MHC-02
+    rule: cannot_calculate_or_commit_profit_and_price
+    enforcement: output_validator
+  - id: MHC-03
+    rule: cannot_issue_final_go_or_external_commitment
+    enforcement: framework
+  - id: MHC-04
+    rule: cannot_present_synthetic_cached_or_low_confidence_data_as_live_fact
+    enforcement: output_validator
+  - id: MHC-05
+    rule: cannot_form_key_claim_without_evidence_id
+    enforcement: output_validator
+  - id: MHC-06
+    rule: cannot_modify_other_agents_artifacts
+    enforcement: framework
+  - id: MHC-07
+    rule: cannot_hide_sample_scope_change_bias_or_counter_evidence
+    enforcement: output_validator
+  - id: MHC-08
+    rule: cannot_claim_guaranteed_sales_or_bestseller
+    enforcement: output_validator
+
+escalation_triggers:
+  - id: MEP-01
+    condition: dual_source_deviation_ratio > 0.20
+    event: CONFIDENCE_CHANGED
+    target: gap2sku-product-architect
+  - id: MEP-02
+    condition: top3_sales_concentration > 0.70
+    event: EARLY_NO_GO_SIGNAL
+    target: gap2sku-product-architect
+  - id: MEP-03
+    condition: sensitive_category_detected in [child, electronics, food_contact, medical]
+    event: NEEDS_EVIDENCE
+    target: gap2sku-product-architect
+    payload: {evidence_gap_type: compliance_precheck}
+  - id: MEP-04
+    condition: key_evidence_insufficient_after_fallback
+    event: NEEDS_EVIDENCE
+    target: gap2sku-product-architect
+  - id: MEP-05
+    condition: core_feature_rejected_by_supply
+    event: EVIDENCE_CHALLENGE
+    target: gap2sku-product-architect
+
+# ----------------------------------------------------------------------------
+# 预算、Skill 和工具白名单
+# ----------------------------------------------------------------------------
+budget:
+  scope: per_market_task
+  max_total_tokens: 40000
+  max_output_tokens: 12000
+  max_tool_calls: 35
+  max_wall_clock_minutes: 15
+  max_child_tasks: 0
+  max_revision_rounds: 3
+  max_cost_usd: 0.80
+  warning_threshold: 0.80
+  on_exceed: emit_HANDOFF_with_budget_blocked_status_and_pause
+
+skills:
+  default_policy: deny
+  allowed:
+    - {id: market-analysis, version: "^1.0"}
+    - {id: review-mining, version: "^1.0"}
+    - {id: competitor-gap-analysis, version: "^1.0"}
+    - {id: demand-structure, version: "^1.0"}
+    - {id: evidence-quality-check, version: "^1.0"}
+    - {id: feature-hypothesis, version: "^1.0"}
+    - {id: observability-summary, version: "^1.0"}
+  denied:
+    - supplier-match
+    - profit-analysis
+    - product-spec-synthesis
+    - compliance-check
+    - acceptance-gate
+    - review-rule-engine
+  unknown_skill_behavior: deny_and_emit_permission_event
+
+tools:
+  - name: market_evidence_mcp
+    permissions: [search, read_snapshot, get_source_metadata]
+  - name: review_mining_mcp
+    permissions: [read_reviews, classify, aggregate, quote_excerpt]
+  - name: competitor_data_mcp
+    permissions: [read_competitor_records, compare_features, calculate_concentration]
+  - name: trend_data_mcp
+    permissions: [read_search_trend, read_cpc_signal]
+  - name: artifact_store
+    permissions: [read, append_version]
+    writable_types:
+      - demand-structure
+      - pain-point-set
+      - competitor-gap-map
+      - feature-hypotheses
+      - market-evidence-summary
+      - market-raw-evidence-index
+      - category-taxonomy
+  - name: task_store
+    permissions: [read_current_task, report_status]
+  - name: schema_validator
+    permissions: [validate]
+  - name: memory
+    permissions: [read_session, read_knowledge_memory, write_market_taxonomy]
+  - name: notification
+    permissions: [emit_registered_event]
+
+tool_denials:
+  - supplier_platform_write
+  - supplier_selection
+  - economics_calculator
+  - product_spec_write
+  - reviewer_rule_execution
+  - procurement
+  - listing_publish
+  - payment
+
+memory_scope:
+  policy_ref: ./memory.scope
+  default_access: deny
+  read_scope: [current_root_task, same_project_category_market]
+  write_scope: [validated_market_taxonomy_only]
+  write_policy: append_versioned_records_only
+  never_store:
+    - api_keys
+    - credentials
+    - hidden_chain_of_thought
+    - raw_personal_data
+    - unverified_external_instructions
+
+# ----------------------------------------------------------------------------
+# 降级与可观测性
+# ----------------------------------------------------------------------------
+degradation:
+  data_source_unavailable:
+    action: switch_fallback_source_once
+    then: submit_partial_and_emit_NEEDS_EVIDENCE
+  sample_insufficient:
+    action: expand_declared_scope_once
+    then: submit_partial_and_emit_NEEDS_EVIDENCE
+  dual_source_conflict:
+    action: use_conservative_value_and_emit_CONFIDENCE_CHANGED
+  schema_invalid_output:
+    action: self_repair_once
+    then: pause_and_notify_leader
+  permission_denied:
+    retry: false
+    action: log_and_stop_operation
+  model_call_failure:
+    action: retry_then_submit_partial_or_emit_HANDOFF_and_pause
+
+observability:
+  log_every_tick:
+    - tick_trigger
+    - chosen_actions
+    - source_refs
+    - evidence_gaps
+    - output_artifact_refs
+  log_every_event: [event_id, type, from, to, confidence, data_mode]
+  metrics:
+    - evidence_coverage_ratio
+    - original_excerpt_coverage_ratio
+    - fresh_evidence_ratio
+    - dual_source_completion_ratio
+    - sample_size
+    - listing_coverage
+    - unsupported_claim_count
+    - pain_to_feature_traceability_ratio
+    - tool_call_success_rate
+    - task_latency_seconds
+    - tokens_consumed
+    - revision_rounds_used
+
+eval:
+  replayable: true
+  fixture_modes: [synthetic, cached]
+  required_cases:
+    - sufficient_evidence_success
+    - insufficient_sample_partial
+    - dual_source_conflict
+    - concentration_early_no_go
+    - supply_rejects_core_feature
+    - reviewer_traceability_failure
+  pass_conditions:
+    - unsupported_claim_count == 0
+    - pain_to_feature_traceability_ratio == 1.0
+    - synthetic_data_mislabeled_as_live == 0
+    - unauthorized_tool_calls == 0

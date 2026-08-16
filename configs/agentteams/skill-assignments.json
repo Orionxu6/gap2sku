@@ -1,0 +1,13 @@
+{
+  "apiVersion": "agentteams.io/v1beta1",
+  "kind": "SkillAssignmentManifest",
+  "metadata": {"name": "gap2sku-v3-skills"},
+  "spec": {
+    "skills": [
+      {"name": "agent-contract-validation", "package": "dist/skills/agent-contract-validation.zip", "workers": ["gap2sku-product-architect", "gap2sku-reviewer"]},
+      {"name": "evidence-conflict-decision", "package": "dist/skills/evidence-conflict-decision.zip", "workers": ["gap2sku-product-architect", "gap2sku-market", "gap2sku-prototype-designer", "gap2sku-supply", "gap2sku-economics", "gap2sku-compliance", "gap2sku-reviewer"]}
+    ],
+    "hotReloadRuntime": "qwenpaw",
+    "validationRequired": true
+  }
+}

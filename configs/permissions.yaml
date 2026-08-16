@@ -1,0 +1,66 @@
+# Gap2SKU permission matrix (spec 13.4, 20).
+# Each role only accesses its own MCP endpoint. Server enforces scope;
+# gateway config is not the only defense.
+
+roles:
+  market:
+    mcp_endpoint: /market/mcp
+    tools:
+      - fixtures.list_snapshots
+      - evidence.search_reviews
+      - evidence.get_competitor_records
+      - state.get_constraints
+      - artifact.validate_local
+    can_write_project_state: false
+    can_commit_artifact: false
+    can_approve: false
+
+  supply:
+    mcp_endpoint: /supply/mcp
+    tools:
+      - fixtures.list_snapshots
+      - evidence.get_supplier_records
+      - state.get_constraints
+      - artifact.get_feature_hypotheses
+      - artifact.validate_local
+    can_write_project_state: false
+    can_commit_artifact: false
+    can_approve: false
+
+  economics:
+    mcp_endpoint: /economics/mcp
+    tools:
+      - state.get_constraints
+      - economics.calculate
+      - economics.verify
+      - artifact.validate_local
+    can_write_project_state: false
+    can_commit_artifact: false
+    can_approve: false
+
+  reviewer:
+    mcp_endpoint: /review/mcp
+    tools:
+      - review.run_rules
+      - graph.get_subgraph
+    can_write_project_state: false
+    can_commit_artifact: false
+    can_approve: false
+    read_only: true
+
+  leader:
+    mcp_endpoint: /leader/mcp
+    tools:
+      - state.create_run
+      - state.get_project
+      - state.get_constraints
+      - context.build_bundle
+      - graph.get_subgraph
+    can_write_project_state: true
+    can_commit_artifact: true
+    can_approve: false  # only Human can approve publish
+
+  human:
+    can_approve: true
+    can_change_constraints: true
+    cannot: [commit_artifact, run_deterministic_rules]

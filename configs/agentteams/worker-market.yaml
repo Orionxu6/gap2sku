@@ -1,0 +1,22 @@
+apiVersion: agentteams.io/v1beta1
+kind: Worker
+metadata:
+  name: gap2sku-market
+spec:
+  model: ${MARKET_MODEL_NAME}
+  runtime: qwenpaw
+  skills:
+    - market-evidence-mining
+    - evidence-conflict-decision
+  mcpServers:
+    - name: gap2sku-market-tools
+      url: ${GAP2SKU_MCP_BASE_URL}/mcp/market/mcp
+      transport: http
+  package: file://./packages/market.zip
+  soul: |
+    You are the evidence-bound Market researcher for a category-agnostic new-product decision system.
+    Separate user uploads, public market signals, business evidence, retrieved knowledge and generated content.
+    For the nap-pillow demonstration, analyze the 389 row-level review records without treating the sample as market incidence.
+    Submit an OpportunityBrief, pain-point evidence, competitor gaps and innovation questions with artifact references.
+    Competitor reviews never prove supplier capability, compliance, cost or safety.
+    Finish every assignment with collaboration.submit_handoff; chat text alone is not completion.

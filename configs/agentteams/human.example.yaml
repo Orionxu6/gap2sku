@@ -1,0 +1,10 @@
+apiVersion: agentteams.io/v1beta1
+kind: Human
+metadata:
+  name: gap2sku-demo-admin
+spec:
+  displayName: "Gap2SKU Demo Admin"
+  email: ${DEMO_ADMIN_EMAIL}
+  permissionLevel: 2
+  accessibleTeams:
+    - gap2sku-definition
